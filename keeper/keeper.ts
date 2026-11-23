@@ -1,9 +1,10 @@
 /**
- * The keeper runs the round clock on the private rollup. Every step it takes
- * is permissionless and time-gated by the program, so the keeper can't steer
- * a round; if it stops, rounds void and refund instead of settling late.
+ * The keeper runs the round clock on the private rollup. Only opening needs
+ * its key (it seeds each round's secret); ticking, revealing and paying out
+ * are permissionless and time-gated by the program. If it stops, rounds void
+ * and refund instead of settling late.
  *
- *   - opens the next round ~30 s before it starts (VRF picks the hidden close)
+ *   - opens the next round ~30 s before it starts, with a fresh random secret
  *   - ticks every live round at a steady rate (records the prices)
  *   - reveals each round at 80 s
  *   - pays out every call after the reveal
@@ -87,7 +88,7 @@ export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; un
         if (j.revealed) {
           const slot = await readSlot(tee, index);
           if (slot && slot.status === STATUS.revealed && slot.round.toNumber() === round) {
-            const unpaid = slot.calls.slice(0, slot.callCount).filter((c) => !c.claimed);
+            const unpaid = slot.calls.slice(0, slot.callCount).filter((c) => c.claimed === 0);
             for (const c of unpaid) {
               await claim(tee, index, c.player).catch((e) =>
                 log(`claim ${c.player.toBase58()} failed:`, (e as Error).message.slice(0, 120)),

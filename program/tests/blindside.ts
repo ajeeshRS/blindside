@@ -1,6 +1,6 @@
 /**
  * End-to-end test on MagicBlock devnet: one real round on the Private
- * Ephemeral Rollup, with real VRF, the real SOL/USD feed and two throwaway
+ * Ephemeral Rollup, with the real SOL/USD feed and two throwaway
  * players funded from the admin wallet. No mocks — this is the privacy proof.
  *
  * Needs: the program deployed and `scripts/setup.ts` run once.
@@ -34,6 +34,7 @@ import {
   PROGRAM_ID,
   readPlayer,
   readSlot,
+  recomputeOffset,
   reveal,
   ROUND,
   roundStart,
@@ -114,6 +115,7 @@ describe("blindside on devnet (private rollup)", function () {
     if (roundStart(round) - nowS() < 20) round += 1;
     index = slotIndex(round);
     await sleepUntil(roundStart(round) - 30);
+    await expectFailure(openRound(aliceTee, round), "a non-keeper opening a round");
     try {
       await openRound(adminTee, round);
     } catch (e) {
@@ -137,7 +139,7 @@ describe("blindside on devnet (private rollup)", function () {
     }
   });
 
-  it("hides the transactions that touch the round, including the VRF callback", async () => {
+  it("hides the transactions that touch the round, including the keeper's secret", async () => {
     const outsiderConn = await teeConnectionFor(outsider);
     const sigs = await outsiderConn.getSignaturesForAddress(slotPda(index), { limit: 25 }).catch(() => []);
     for (const s of sigs) {
@@ -195,9 +197,13 @@ describe("blindside on devnet (private rollup)", function () {
     console.log(
       `    close at ${slot!.offsetS}s, strike ${slot!.strike.toString()} → ${slot!.settle.toString()}, outcome ${slot!.outcome}, void reason ${slot!.voidReason}`,
     );
-    assert.isTrue(slot!.vrfReady, "VRF answered");
+    assert.equal(slot!.seeded, 1, "close was fixed at 10 s");
     assert.isAtLeast(slot!.offsetS, ROUND.closeMin);
     assert.isAtMost(slot!.offsetS, ROUND.closeMax);
+    // Anyone can now check the close from the public secret and nonces.
+    const mixed = slot!.calls.slice(0, slot!.seedCalls);
+    assert.equal(recomputeOffset(slot!.secret, mixed), slot!.offsetS, "close recomputes from public data");
+    assert.equal(slot!.seedCalls, 2, "both early calls were mixed into the close");
     if (slot!.outcome !== OUTCOME.void) {
       const start = roundStart(round);
       assert.approximately(slot!.strikeTs.toNumber() - start, slot!.offsetS, 2, "strike recorded at the close");
