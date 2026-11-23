@@ -19,7 +19,7 @@ Every 90 s (wall clock, `round = floor(unix / 90)`):
 - **Private rollup (TEE):** 8 reusable round `Slot`s (`round % 8`) whose permission has **no readers** until the reveal, and each `Player` balance, readable only by that player.
 - **Rules:** plain functions in `programs/blindside/src/logic.rs`, unit-tested there.
 
-Opening a round needs the keeper key, because it seeds the secret. Ticking, revealing and paying out are permissionless and time-gated, so nobody can steer a running round. If the keeper misses a tick, the round is voided and refunded rather than settled on a late price.
+Opening a round needs the keeper key, because it seeds the secret. The keeper key is a separate hot key assigned by the admin with `set_keeper`; it can only open rounds, so the admin (who is also the upgrade authority) never sits on a server. Ticking, revealing and paying out are permissionless and time-gated, so nobody can steer a running round. If the keeper misses a tick, the round is voided and refunded rather than settled on a late price.
 
 ## Fairness guarantees, and where they're enforced
 
@@ -48,7 +48,7 @@ pnpm test:unit        # 25 Rust tests for the round rules (no network)
 pnpm typecheck        # scripts + tests
 anchor build          # on macOS with Xcode 27 SDK: SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk anchor build
 anchor deploy --provider.cluster devnet
-pnpm setup:devnet     # once: config, mint, vault, 8 private slots
+pnpm setup:devnet     # once: config, mint, vault, keeper role (+ key), 8 private slots
 pnpm keeper           # runs the round clock
 pnpm test:devnet      # one real round end to end (~3 min): privacy, early reveal, payouts, withdraw
 pnpm probe            # read-only: can the TEE see the price feed?

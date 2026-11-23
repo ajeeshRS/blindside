@@ -1123,28 +1123,28 @@ export type Blindside = {
       ],
       "accounts": [
         {
-          "name": "admin",
+          "name": "keeper",
           "docs": [
             "The keeper: only it can seed a round's secret."
           ],
           "signer": true,
           "relations": [
-            "config"
+            "keeperRole"
           ]
         },
         {
-          "name": "config",
+          "name": "keeperRole",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
+                  107,
+                  101,
+                  101,
+                  112,
+                  101,
+                  114
                 ]
               }
             ]
@@ -1389,6 +1389,79 @@ export type Blindside = {
       "args": []
     },
     {
+      "name": "setKeeper",
+      "docs": [
+        "Admin: assign (or rotate) the key allowed to open rounds."
+      ],
+      "discriminator": [
+        102,
+        94,
+        23,
+        78,
+        157,
+        222,
+        243,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "keeperRole",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  101,
+                  101,
+                  112,
+                  101,
+                  114
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "keeper",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "tick",
       "docs": [
         "Steady-rate keeper call: records the starting and result prices at",
@@ -1613,6 +1686,19 @@ export type Blindside = {
         124,
         157,
         190
+      ]
+    },
+    {
+      "name": "keeperRole",
+      "discriminator": [
+        195,
+        81,
+        64,
+        101,
+        204,
+        136,
+        73,
+        122
       ]
     },
     {
@@ -1853,6 +1939,27 @@ export type Blindside = {
           {
             "name": "lastTs",
             "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "keeperRole",
+      "docs": [
+        "The keeper role. Only this key can open rounds (it seeds each round's",
+        "secret). Kept apart from the admin, which is also the upgrade authority,",
+        "so the key that lives on an always-on server can't touch the program."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "keeper",
+            "type": "pubkey"
           },
           {
             "name": "bump",

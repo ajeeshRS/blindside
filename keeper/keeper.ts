@@ -26,7 +26,7 @@ import {
   tick,
   type BlindsideProgram,
 } from "@blindside/client";
-import { loadKeypair, teeProgramFor } from "@blindside/client/node";
+import { loadKeeperKeypair, teeProgramFor } from "@blindside/client/node";
 
 const TICK_MS = 400;
 const OPEN_BEFORE_S = 30;
@@ -113,7 +113,7 @@ export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; un
 
 if (require.main === module) {
   (async () => {
-    const tee = await teeProgramFor(loadKeypair());
+    const tee = await teeProgramFor(loadKeeperKeypair());
     console.log("keeper running as", tee.provider.publicKey!.toBase58());
     await runKeeper(tee);
   })().catch((e) => {

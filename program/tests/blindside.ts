@@ -49,7 +49,7 @@ import {
   withdrawRaw,
   type BlindsideProgram,
 } from "@blindside/client";
-import { baseProgramFor, loadKeypair, teeConnectionFor, teeProgramFor } from "@blindside/client/node";
+import { baseProgramFor, loadKeeperKeypair, loadKeypair, teeConnectionFor, teeProgramFor } from "@blindside/client/node";
 
 const UP = SIDE.up;
 const DOWN = SIDE.down;
@@ -69,11 +69,13 @@ describe("blindside on devnet (private rollup)", function () {
   this.timeout(10 * 60 * 1000);
 
   const admin = loadKeypair();
+  const keeper = loadKeeperKeypair();
   const alice = Keypair.generate();
   const bob = Keypair.generate();
   const outsider = Keypair.generate();
 
   let adminTee: BlindsideProgram;
+  let keeperTee: BlindsideProgram;
   let aliceTee: BlindsideProgram;
   let bobTee: BlindsideProgram;
   let round: number;
@@ -103,6 +105,7 @@ describe("blindside on devnet (private rollup)", function () {
     }
 
     adminTee = await teeProgramFor(admin);
+    keeperTee = await teeProgramFor(keeper);
     aliceTee = await teeProgramFor(alice);
     bobTee = await teeProgramFor(bob);
   });
@@ -115,9 +118,10 @@ describe("blindside on devnet (private rollup)", function () {
     if (roundStart(round) - nowS() < 20) round += 1;
     index = slotIndex(round);
     await sleepUntil(roundStart(round) - 30);
-    await expectFailure(openRound(aliceTee, round), "a non-keeper opening a round");
+    await expectFailure(openRound(aliceTee, round), "a player opening a round");
+    await expectFailure(openRound(adminTee, round), "the admin opening a round (only the keeper key can)");
     try {
-      await openRound(adminTee, round);
+      await openRound(keeperTee, round);
     } catch (e) {
       // A keeper may already have opened it; the rest of the test still applies.
       console.log("    open_round:", (e as Error).message.slice(0, 120));

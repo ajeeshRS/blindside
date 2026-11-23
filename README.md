@@ -42,7 +42,7 @@ pnpm dev                # web app on http://localhost:3000
 
 # devnet (program already deployed)
 pnpm setup:devnet       # once: config, test USDC, 8 private round slots
-pnpm keeper             # keep rounds running
+pnpm keeper             # keep rounds running (KEEPER_SECRET_KEY or ~/.config/blindside/keeper.json)
 pnpm test:devnet        # one real round end to end (~3 min)
 ```
 

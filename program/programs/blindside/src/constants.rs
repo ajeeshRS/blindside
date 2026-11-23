@@ -16,6 +16,9 @@ pub const VAULT_SEED: &[u8] = b"vault";
 pub const SLOT_SEED: &[u8] = b"round_slot";
 pub const PLAYER_SEED: &[u8] = b"player";
 pub const DRIP_SEED: &[u8] = b"drip";
+/// Who may open rounds (a hot key on the keeper server, separate from the
+/// admin / upgrade authority).
+pub const KEEPER_SEED: &[u8] = b"keeper";
 
 // ---- The round clock (seconds). Must match web/lib/config.ts `ROUND`. ----
 /// Rounds start on wall-clock multiples of 90 s: round = floor(unix / 90).

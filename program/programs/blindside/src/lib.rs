@@ -15,7 +15,8 @@
 //!   * Private Ephemeral Rollup (TEE): 8 reusable round slots with NO readers
 //!     until the reveal, and each player's balance (readable only by them).
 //!
-//! Opening a round needs the keeper key (it seeds the secret). Ticking,
+//! Opening a round needs the keeper key (it seeds the secret); the admin
+//! assigns that key with `set_keeper` and can rotate it. Ticking,
 //! revealing and paying out are permissionless and gated by the clock, so no
 //! one can steer a running round. The rules themselves are plain functions in
 //! `logic.rs`, unit-tested there.
@@ -90,6 +91,15 @@ pub mod blindside {
             ),
             FAUCET_AMOUNT,
         )
+    }
+
+    /// Admin: assign (or rotate) the key allowed to open rounds.
+    pub fn set_keeper(ctx: Context<SetKeeper>, keeper: Pubkey) -> Result<()> {
+        ctx.accounts.keeper_role.set_inner(KeeperRole {
+            keeper,
+            bump: ctx.bumps.keeper_role,
+        });
+        Ok(())
     }
 
     /// Create a round slot and a permission with no readers.
@@ -530,11 +540,28 @@ pub struct DelegatePlayer<'info> {
 }
 
 #[derive(Accounts)]
-pub struct OpenRound<'info> {
-    /// The keeper: only it can seed a round's secret.
+pub struct SetKeeper<'info> {
+    #[account(mut)]
     pub admin: Signer<'info>,
     #[account(seeds = [CONFIG_SEED], bump = config.bump, has_one = admin)]
     pub config: Account<'info, Config>,
+    #[account(
+        init_if_needed,
+        payer = admin,
+        space = 8 + KeeperRole::INIT_SPACE,
+        seeds = [KEEPER_SEED],
+        bump,
+    )]
+    pub keeper_role: Account<'info, KeeperRole>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct OpenRound<'info> {
+    /// The keeper: only it can seed a round's secret.
+    pub keeper: Signer<'info>,
+    #[account(seeds = [KEEPER_SEED], bump = keeper_role.bump, has_one = keeper)]
+    pub keeper_role: Account<'info, KeeperRole>,
     #[account(mut, seeds = [SLOT_SEED, &[slot.load()?.index]], bump = slot.load()?.bump)]
     pub slot: AccountLoader<'info, Slot>,
     /// CHECK: permission PDA for `slot`; the permission program checks it.

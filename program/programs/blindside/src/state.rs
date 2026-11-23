@@ -130,6 +130,16 @@ pub struct Player {
     pub bump: u8,
 }
 
+/// The keeper role. Only this key can open rounds (it seeds each round's
+/// secret). Kept apart from the admin, which is also the upgrade authority,
+/// so the key that lives on an always-on server can't touch the program.
+#[account]
+#[derive(InitSpace)]
+pub struct KeeperRole {
+    pub keeper: Pubkey,
+    pub bump: u8,
+}
+
 /// Faucet rate limit, one per wallet.
 #[account]
 #[derive(InitSpace)]

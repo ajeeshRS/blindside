@@ -53,12 +53,16 @@ export function delegatePlayer(base: BlindsideProgram) {
 
 // ---------------- private rollup ----------------
 
+/** Admin only (base layer): assign the key allowed to open rounds. */
+export const setKeeper = (base: BlindsideProgram, keeper: PublicKey) =>
+  base.methods.setKeeper(keeper).accounts({ admin: me(base) }).rpc();
+
 /** Keeper only: opens a round with a fresh random secret. */
 export const openRound = (tee: BlindsideProgram, round: number) =>
   tee.methods
     .openRound(new BN(round), random32())
     .accountsPartial({
-      admin: me(tee),
+      keeper: me(tee),
       slot: slotPda(slotIndex(round)),
       permission: permissionPdaFromAccount(slotPda(slotIndex(round))),
     })
