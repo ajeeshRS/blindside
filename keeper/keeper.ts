@@ -112,6 +112,11 @@ export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; un
 }
 
 if (require.main === module) {
+  // Crash loudly so the host restarts us, rather than hanging half-alive.
+  process.on("unhandledRejection", (e) => {
+    console.error("unhandled rejection", e);
+    process.exit(1);
+  });
   (async () => {
     const tee = await teeProgramFor(loadKeeperKeypair());
     console.log("keeper running as", tee.provider.publicKey!.toBase58());

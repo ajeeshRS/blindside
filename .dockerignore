@@ -1,0 +1,9 @@
+**/node_modules
+**/.next
+program/target
+.git
+.claude
+**/*.log
+.env*
+*-keypair.json
+id.json
