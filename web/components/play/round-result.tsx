@@ -29,9 +29,12 @@ export function RoundResultCard({ call }: { call: MyCall }) {
   const late = mine?.late ?? false;
   const back = payoutFor(r, call.side, call.amount, late);
   const net = back - call.amount;
+  const oneSided = r.outcome === "void" && r.slot.voidReason === 6;
   const headline =
     r.outcome === "void"
-      ? "Refunded"
+      ? oneSided
+        ? "Refunded: nobody took the other side"
+        : "Refunded"
       : late
         ? "Refunded: your call landed after the close"
         : net > 0
@@ -70,8 +73,14 @@ export function RoundResultCard({ call }: { call: MyCall }) {
           )}{" "}
           {call.side === SIDE.up ? "Higher" : "Lower"} with {call.amount} USDC
           {back > 0 && r.outcome !== "void" && !late ? ` · got back ${usdc(back)}` : ""}
-          {r.outcome === "void" && r.voidReason ? ` · ${r.voidReason}` : ""}
+          {r.outcome === "void" && r.voidReason && !oneSided ? ` · ${r.voidReason}` : ""}
         </p>
+        {oneSided && (
+          <p className="mt-4 text-[12px] leading-[17px] text-text-tertiary">
+            Winners are paid from the other side&apos;s stakes, so a round needs calls on both
+            Higher and Lower. Everyone got their stake back.
+          </p>
+        )}
 
         <dl className="mt-12 grid grid-cols-2 gap-x-12 gap-y-8 border-t border-dashed border-border-secondary-hover pt-12 text-[13px]">
           <div>
