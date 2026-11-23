@@ -61,47 +61,6 @@ export type Blindside = {
       "args": []
     },
     {
-      "name": "consumeRandomness",
-      "docs": [
-        "VRF callback: fixes the hidden close inside the private slot."
-      ],
-      "discriminator": [
-        190,
-        217,
-        49,
-        162,
-        99,
-        26,
-        73,
-        234
-      ],
-      "accounts": [
-        {
-          "name": "vrfProgramIdentity",
-          "docs": [
-            "Scoped VRF identity PDA, bound to this program. Its presence as a signer proves",
-            "the callback was issued by the VRF program for this program."
-          ],
-          "signer": true
-        },
-        {
-          "name": "slot",
-          "writable": true
-        }
-      ],
-      "args": [
-        {
-          "name": "randomness",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        }
-      ]
-    },
-    {
       "name": "delegatePlayer",
       "docs": [
         "Hand the player's balance (and, the first time, its permission) to",
@@ -1148,8 +1107,9 @@ export type Blindside = {
     {
       "name": "openRound",
       "docs": [
-        "Start a round in its slot (make it private again if it was revealed)",
-        "and ask MagicBlock VRF for the hidden close."
+        "Start a round in its slot with the keeper's secret, making the slot",
+        "private again if the previous round was revealed. The secret travels",
+        "in this transaction's message, which the private rollup hides."
       ],
       "discriminator": [
         66,
@@ -1163,9 +1123,32 @@ export type Blindside = {
       ],
       "accounts": [
         {
-          "name": "payer",
-          "writable": true,
-          "signer": true
+          "name": "admin",
+          "docs": [
+            "The keeper: only it can seed a round's secret."
+          ],
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "slot",
@@ -1178,43 +1161,6 @@ export type Blindside = {
         {
           "name": "permissionProgram",
           "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
-        },
-        {
-          "name": "oracleQueue",
-          "writable": true,
-          "address": "5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc"
-        },
-        {
-          "name": "programIdentity",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  105,
-                  100,
-                  101,
-                  110,
-                  116,
-                  105,
-                  116,
-                  121
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "vrfProgram",
-          "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
-        },
-        {
-          "name": "slotHashes",
-          "address": "SysvarS1otHashes111111111111111111111111111"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -1223,15 +1169,21 @@ export type Blindside = {
           "type": "u64"
         },
         {
-          "name": "clientSeed",
-          "type": "u8"
+          "name": "secret",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
     {
       "name": "placeCall",
       "docs": [
-        "Make a call. Debits the stake now; late calls are refunded at the reveal."
+        "Make a call. Debits the stake now; late calls are refunded at the reveal.",
+        "`nonce` is random bytes from the player's device (mixed into the close)."
       ],
       "discriminator": [
         11,
@@ -1288,6 +1240,15 @@ export type Blindside = {
         {
           "name": "amount",
           "type": "u64"
+        },
+        {
+          "name": "nonce",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -1781,12 +1742,32 @@ export type Blindside = {
   "types": [
     {
       "name": "callEntry",
+      "docs": [
+        "One call in a round. Zero-copy layout: 80 bytes, no implicit padding."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "player",
             "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "docs": [
+              "Random value from the player's device. Calls made before the close is",
+              "fixed (10 s) are mixed into it, so the keeper can't predict it either."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "amount",
@@ -1805,13 +1786,25 @@ export type Blindside = {
           {
             "name": "late",
             "docs": [
-              "Landed after the secret close: refunded at the reveal, never counted."
+              "1 if it landed after the secret close: refunded at the reveal, never counted."
             ],
-            "type": "bool"
+            "type": "u8"
           },
           {
             "name": "claimed",
-            "type": "bool"
+            "docs": [
+              "1 once paid out."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "pad",
+            "type": {
+              "array": [
+                "u8",
+                5
+              ]
+            }
           }
         ]
       }
@@ -1907,48 +1900,21 @@ export type Blindside = {
       "docs": [
         "One reusable round slot (round % SLOTS). Lives in the Private Ephemeral",
         "Rollup with a permission that has no readers until the reveal, so the",
-        "close time, the starting price and the pools stay hidden while it runs."
+        "close time, the starting price and the pools stay hidden while it runs.",
+        "",
+        "Zero-copy (read in place) because it's ~4 KB, over Solana's 4 KB stack",
+        "frame. Wide fields first so the layout has no implicit padding."
       ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "index",
-            "type": "u8"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
             "name": "round",
             "type": "u64"
-          },
-          {
-            "name": "status",
-            "type": "u8"
-          },
-          {
-            "name": "offsetS",
-            "docs": [
-              "Seconds after the round start when calls stop counting (10..=50)."
-            ],
-            "type": "u8"
-          },
-          {
-            "name": "vrfReady",
-            "type": "bool"
-          },
-          {
-            "name": "outcome",
-            "docs": [
-              "UP, DOWN, VOID or PENDING."
-            ],
-            "type": "u8"
-          },
-          {
-            "name": "voidReason",
-            "type": "u8"
           },
           {
             "name": "strike",
@@ -1984,12 +1950,28 @@ export type Blindside = {
             "type": "u64"
           },
           {
-            "name": "callCount",
-            "type": "u8"
+            "name": "secret",
+            "docs": [
+              "The keeper's secret for this round, set at open. Public after the reveal."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
-            "name": "claimedCount",
-            "type": "u8"
+            "name": "entropy",
+            "docs": [
+              "Running hash: H(secret), then H(prev ‖ player ‖ nonce) per early call."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "calls",
@@ -2001,6 +1983,68 @@ export type Blindside = {
                   }
                 },
                 48
+              ]
+            }
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "offsetS",
+            "docs": [
+              "Seconds after the round start when calls stop counting (10..=50).",
+              "Zero until it is fixed at 10 s."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "seeded",
+            "docs": [
+              "1 once the close is fixed."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "seedCalls",
+            "docs": [
+              "How many calls (in order) were mixed into the close."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "outcome",
+            "docs": [
+              "UP, DOWN, VOID or PENDING."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "voidReason",
+            "type": "u8"
+          },
+          {
+            "name": "callCount",
+            "type": "u8"
+          },
+          {
+            "name": "claimedCount",
+            "type": "u8"
+          },
+          {
+            "name": "pad",
+            "type": {
+              "array": [
+                "u8",
+                6
               ]
             }
           }

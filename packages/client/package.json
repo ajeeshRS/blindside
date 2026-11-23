@@ -17,7 +17,8 @@
     "@magicblock-labs/ephemeral-rollups-sdk": "0.18.0",
     "@solana/spl-token": "0.4.9",
     "@solana/web3.js": "1.98.4",
-    "tweetnacl": "1.0.3"
+    "tweetnacl": "1.0.3",
+    "@noble/hashes": "1.8.0"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

@@ -5,4 +5,5 @@ export * from "./src/pdas";
 export * from "./src/program";
 export * from "./src/instructions";
 export * from "./src/accounts";
+export * from "./src/verify";
 export { BN } from "@coral-xyz/anchor";

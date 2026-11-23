@@ -10,6 +10,7 @@ import type { BlindsideProgram } from "./program";
 const ER_OPTS = { skipPreflight: true, commitment: "confirmed" } as const;
 const usdc = (amount: number) => new BN(Math.round(amount * ONE_USDC));
 const me = (p: BlindsideProgram) => p.provider.publicKey!;
+const random32 = () => Array.from(crypto.getRandomValues(new Uint8Array(32)));
 
 // ---------------- base layer ----------------
 
@@ -52,11 +53,12 @@ export function delegatePlayer(base: BlindsideProgram) {
 
 // ---------------- private rollup ----------------
 
+/** Keeper only: opens a round with a fresh random secret. */
 export const openRound = (tee: BlindsideProgram, round: number) =>
   tee.methods
-    .openRound(new BN(round), Math.floor(Math.random() * 256))
+    .openRound(new BN(round), random32())
     .accountsPartial({
-      payer: me(tee),
+      admin: me(tee),
       slot: slotPda(slotIndex(round)),
       permission: permissionPdaFromAccount(slotPda(slotIndex(round))),
     })
@@ -65,9 +67,10 @@ export const openRound = (tee: BlindsideProgram, round: number) =>
 export const tick = (tee: BlindsideProgram, index: number) =>
   tee.methods.tick().accountsPartial({ slot: slotPda(index), feed: SOL_USD_FEED }).rpc(ER_OPTS);
 
+/** Each call carries a random nonce that feeds the hidden close. */
 export const placeCall = (tee: BlindsideProgram, round: number, side: number, amountUsdc: number) =>
   tee.methods
-    .placeCall(new BN(round), side, usdc(amountUsdc))
+    .placeCall(new BN(round), side, usdc(amountUsdc), random32())
     .accountsPartial({
       user: me(tee),
       player: playerPda(me(tee)),
