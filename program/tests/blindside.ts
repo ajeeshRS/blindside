@@ -12,7 +12,7 @@
  * (`cargo test`).
  */
 import { assert } from "chai";
-import { PERMISSION_PROGRAM_ID, waitUntilPermissionActive } from "@magicblock-labs/ephemeral-rollups-sdk";
+import { PERMISSION_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { getAccount } from "@solana/spl-token";
 import { Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
 import {
@@ -43,7 +43,6 @@ import {
   slotIndex,
   slotPda,
   STATUS,
-  TEE_RPC,
   tick,
   userAta,
   withdrawRaw,
@@ -100,7 +99,6 @@ describe("blindside on devnet (private rollup)", function () {
       await join(p);
       await deposit(p, DEPOSIT);
       await delegatePlayer(p);
-      await waitUntilPermissionActive(TEE_RPC, playerPda(kp.publicKey), 30_000);
     }
 
     adminTee = await teeProgramFor(admin);
