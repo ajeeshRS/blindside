@@ -29,14 +29,14 @@ export function RoundResultCard({ call }: { call: MyCall }) {
   const late = mine?.late ?? false;
   const back = payoutFor(r, call.side, call.amount, late);
   const net = back - call.amount;
-  const oneSided = r.outcome === "void" && r.slot.voidReason === 6;
-  const headline =
-    r.outcome === "void"
+  // A late call is the more specific reason, so it wins over a one-sided void.
+  const oneSided = r.outcome === "void" && r.slot.voidReason === 6 && !late;
+  const headline = late
+    ? `Refunded: your call landed after the secret close (0:${String(r.closeS).padStart(2, "0")})`
+    : r.outcome === "void"
       ? oneSided
         ? "Refunded: nobody took the other side"
         : "Refunded"
-      : late
-        ? "Refunded: your call landed after the close"
         : net > 0
           ? `You won +${usdc(net)} USDC`
           : "Not this time";
@@ -73,7 +73,7 @@ export function RoundResultCard({ call }: { call: MyCall }) {
           )}{" "}
           {call.side === SIDE.up ? "Higher" : "Lower"} with {call.amount} USDC
           {back > 0 && r.outcome !== "void" && !late ? ` · got back ${usdc(back)}` : ""}
-          {r.outcome === "void" && r.voidReason && !oneSided ? ` · ${r.voidReason}` : ""}
+          {r.outcome === "void" && r.voidReason && !oneSided && !late ? ` · ${r.voidReason}` : ""}
         </p>
         {oneSided && (
           <p className="mt-4 text-[12px] leading-[17px] text-text-tertiary">

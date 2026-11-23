@@ -42,7 +42,12 @@ export function MarketChart({ className }: { className?: string }) {
   useEffect(() => {
     if (!result) return setShownAt(null);
     setShownAt(Date.now());
-    if (settings.haptics && typeof navigator !== "undefined" && "vibrate" in navigator) {
+    // Browsers only allow vibration after the user has interacted with the page.
+    const activated =
+      typeof navigator !== "undefined" &&
+      (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation
+        ?.hasBeenActive;
+    if (settings.haptics && activated && "vibrate" in navigator) {
       navigator.vibrate?.(result.outcome === "void" ? 15 : [20, 40, 20]);
     }
   }, [result, settings.haptics]);
@@ -112,7 +117,9 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
     const back = payoutFor(result, mine.side, mine.amount, onChain?.late ?? false);
     const net = back - mine.amount;
     personal =
-      result.outcome === "void" || onChain?.late
+      onChain?.late
+        ? { text: `Refunded ${fmtUsdc(mine.amount)} USDC: your call was after the close`, tone: "neutral" }
+        : result.outcome === "void"
         ? { text: `Refunded ${fmtUsdc(mine.amount)} USDC`, tone: "neutral" }
         : net > 0
           ? { text: `You won +${fmtUsdc(net)} USDC`, tone: "up" }
