@@ -6,8 +6,17 @@
 //! behave differently (succeed vs fail, touch different accounts) depending
 //! on the hidden close. Calls are always accepted inside the public 0–50 s
 //! window, and `tick` always succeeds.
+//!
+//! How the close is chosen (no single party controls it):
+//!   entropy₀ = H("blindside" ‖ secret)            secret: set by the keeper at open
+//!   entropyᵢ = H(entropyᵢ₋₁ ‖ playerᵢ ‖ nonceᵢ)    each call before the close is fixed
+//!   close    = 10 + u64(entropy at 10 s) mod 41   fixed by the first tick at ≥ 10 s
+//! The keeper doesn't see players' nonces and players don't see the secret, so
+//! nobody can predict the close. After the reveal, the secret and every nonce
+//! are public and anyone can recompute it (`recompute_offset`).
 
 use anchor_lang::prelude::*;
+use solana_sha256_hasher::hashv;
 
 use crate::constants::*;
 use crate::errors::BlindsideError;
@@ -22,10 +31,26 @@ pub fn slot_index(round: u64) -> u8 {
 }
 
 /// Close offset in whole seconds, uniform over [CLOSE_MIN_S, CLOSE_MAX_S].
-pub fn close_offset(randomness: &[u8; 32]) -> u8 {
-    let r = u64::from_le_bytes(randomness[0..8].try_into().unwrap());
+pub fn close_offset(entropy: &[u8; 32]) -> u8 {
+    let r = u64::from_le_bytes(entropy[0..8].try_into().unwrap());
     let span = (CLOSE_MAX_S - CLOSE_MIN_S + 1) as u64;
     (CLOSE_MIN_S as u64 + r % span) as u8
+}
+
+pub fn initial_entropy(secret: &[u8; 32]) -> [u8; 32] {
+    hashv(&[b"blindside", secret]).to_bytes()
+}
+
+pub fn mix(entropy: &[u8; 32], player: &Pubkey, nonce: &[u8; 32]) -> [u8; 32] {
+    hashv(&[entropy, player.as_ref(), nonce]).to_bytes()
+}
+
+/// Recompute a revealed round's close from its public secret and calls.
+pub fn recompute_offset(secret: &[u8; 32], calls: &[CallEntry]) -> u8 {
+    let e = calls
+        .iter()
+        .fold(initial_entropy(secret), |e, c| mix(&e, &c.player, &c.nonce));
+    close_offset(&e)
 }
 
 /// Read price (1e-8 USD) and publish time (unix s) from a Pyth Lazer feed
@@ -39,8 +64,8 @@ pub fn read_feed(data: &[u8]) -> Option<(i64, i64)> {
     Some((price, publish))
 }
 
-/// Start a new round in this slot.
-pub fn open(slot: &mut Slot, round: u64, now: i64) -> Result<()> {
+/// Start a new round in this slot with the keeper's secret.
+pub fn open(slot: &mut Slot, round: u64, now: i64, secret: [u8; 32]) -> Result<()> {
     require!(slot.index == slot_index(round), BlindsideError::WrongSlot);
     let start = round_start(round);
     require!(
@@ -55,20 +80,9 @@ pub fn open(slot: &mut Slot, round: u64, now: i64) -> Result<()> {
     slot.reset();
     slot.round = round;
     slot.status = STATUS_OPEN;
+    slot.secret = secret;
+    slot.entropy = initial_entropy(&secret);
     Ok(())
-}
-
-/// VRF callback: fix the hidden close. Ignored if it arrives too late (the
-/// next tick voids the round) or twice.
-pub fn set_randomness(slot: &mut Slot, randomness: &[u8; 32], now: i64) {
-    if slot.status != STATUS_OPEN || slot.vrf_ready {
-        return;
-    }
-    if now >= round_start(slot.round) + CLOSE_MIN_S {
-        return;
-    }
-    slot.offset_s = close_offset(randomness);
-    slot.vrf_ready = true;
 }
 
 fn void(slot: &mut Slot, reason: u8) {
@@ -84,11 +98,14 @@ pub fn tick(slot: &mut Slot, now: i64, price: i64, publish: i64) {
         return;
     }
     let start = round_start(slot.round);
-    if !slot.vrf_ready {
-        if now >= start + CLOSE_MIN_S {
-            void(slot, VOID_NO_RANDOMNESS);
+    if slot.seeded == 0 {
+        if now < start + CLOSE_MIN_S {
+            return;
         }
-        return;
+        // Fix the close from the secret and every call so far.
+        slot.offset_s = close_offset(&slot.entropy);
+        slot.seed_calls = slot.call_count;
+        slot.seeded = 1;
     }
     let stale = price <= 0 || now - publish > STALE_S;
 
@@ -134,6 +151,7 @@ pub fn place_call(
     player: Pubkey,
     side: u8,
     amount: u64,
+    nonce: [u8; 32],
 ) -> Result<()> {
     require!(
         slot.status == STATUS_OPEN && slot.round == round,
@@ -156,11 +174,16 @@ pub fn place_call(
     let late = slot.strike_ts != 0;
     slot.calls[n] = CallEntry {
         player,
+        nonce,
         amount,
         side,
-        late,
-        claimed: false,
+        late: late as u8,
+        claimed: 0,
+        _pad: [0; 5],
     };
+    if slot.seeded == 0 {
+        slot.entropy = mix(&slot.entropy, &player, &nonce);
+    }
     slot.call_count += 1;
     if !late {
         if side == UP {
@@ -208,7 +231,7 @@ fn pools(slot: &Slot, side: u8) -> (u64, u64) {
 
 /// What a call pays back once the round is revealed.
 pub fn payout(slot: &Slot, call: &CallEntry) -> u64 {
-    if slot.outcome == VOID || call.late {
+    if slot.outcome == VOID || call.late != 0 {
         return call.amount;
     }
     if call.side != slot.outcome {
@@ -228,9 +251,9 @@ pub fn claim(slot: &mut Slot, player: Pubkey) -> Result<u64> {
         .iter()
         .position(|c| c.player == player)
         .ok_or(BlindsideError::NoCall)?;
-    require!(!slot.calls[i].claimed, BlindsideError::AlreadyClaimed);
+    require!(slot.calls[i].claimed == 0, BlindsideError::AlreadyClaimed);
     let amount = payout(slot, &slot.calls[i]);
-    slot.calls[i].claimed = true;
+    slot.calls[i].claimed = 1;
     slot.claimed_count += 1;
     Ok(amount)
 }
@@ -246,18 +269,25 @@ mod tests {
     fn key(n: u8) -> Pubkey {
         Pubkey::new_from_array([n; 32])
     }
+    const SECRET: [u8; 32] = [7; 32];
+    fn open_t(s: &mut Slot, round: u64, now: i64) -> Result<()> {
+        open(s, round, now, SECRET)
+    }
+    fn pc(s: &mut Slot, round: u64, now: i64, p: Pubkey, side: u8, amount: u64) -> Result<()> {
+        place_call(s, round, now, p, side, amount, [9; 32])
+    }
     fn rnd(n: u64) -> [u8; 32] {
         let mut r = [0u8; 32];
         r[..8].copy_from_slice(&n.to_le_bytes());
         r
     }
-    /// An open round whose close is at `offset` seconds.
+    /// An open round whose close is pinned at `offset` seconds, for testing
+    /// the rules after the close is fixed. (How it's derived is tested below.)
     fn open_round(offset: u8) -> Slot {
         let mut s = Slot::new(slot_index(ROUND), 255);
-        open(&mut s, ROUND, start() - 30).unwrap();
-        // randomness r gives offset 10 + r % 41
-        set_randomness(&mut s, &rnd((offset as u64) - 10), start() - 20);
-        assert_eq!(s.offset_s, offset);
+        open_t(&mut s, ROUND, start() - 30).unwrap();
+        s.seeded = 1;
+        s.offset_s = offset;
         s
     }
     fn err<T: std::fmt::Debug>(r: Result<T>, e: BlindsideError) {
@@ -302,46 +332,108 @@ mod tests {
     #[test]
     fn open_checks_slot_and_window() {
         let mut s = Slot::new(1, 255);
-        err(open(&mut s, ROUND, start() - 10), BlindsideError::WrongSlot);
+        err(open_t(&mut s, ROUND, start() - 10), BlindsideError::WrongSlot);
         let mut s = Slot::new(0, 255);
-        err(open(&mut s, ROUND, start() - 61), BlindsideError::OpenWindowClosed);
-        err(open(&mut s, ROUND, start() + 5), BlindsideError::OpenWindowClosed);
-        open(&mut s, ROUND, start() + 4).unwrap();
+        err(open_t(&mut s, ROUND, start() - 61), BlindsideError::OpenWindowClosed);
+        err(open_t(&mut s, ROUND, start() + 5), BlindsideError::OpenWindowClosed);
+        open_t(&mut s, ROUND, start() + 4).unwrap();
         assert_eq!(s.status, STATUS_OPEN);
     }
 
     #[test]
     fn slot_reused_only_after_everyone_is_paid() {
         let mut s = open_round(20);
-        place_call(&mut s, ROUND, start() + 1, key(1), UP, MIN_STAKE).unwrap();
+        pc(&mut s, ROUND, start() + 1, key(1), UP, MIN_STAKE).unwrap();
         let next = ROUND + SLOTS;
         let next_start = round_start(next);
         // still running
-        err(open(&mut s, next, next_start - 10), BlindsideError::SlotBusy);
+        err(open_t(&mut s, next, next_start - 10), BlindsideError::SlotBusy);
         reveal(&mut s, start() + REVEAL_S).unwrap();
         // revealed but not paid
-        err(open(&mut s, next, next_start - 10), BlindsideError::SlotBusy);
+        err(open_t(&mut s, next, next_start - 10), BlindsideError::SlotBusy);
         claim(&mut s, key(1)).unwrap();
-        open(&mut s, next, next_start - 10).unwrap();
+        open_t(&mut s, next, next_start - 10).unwrap();
         assert_eq!(s.round, next);
         assert_eq!(s.call_count, 0);
-        assert!(!s.vrf_ready);
+        assert_eq!(s.seeded, 0);
+        assert_eq!(s.secret, SECRET);
         // can't go backwards
         let mut s2 = s.clone();
         reveal(&mut s2, next_start + REVEAL_S).unwrap();
-        err(open(&mut s2, ROUND, start() - 10), BlindsideError::RoundNotNewer);
+        err(open_t(&mut s2, ROUND, start() - 10), BlindsideError::RoundNotNewer);
+    }
+
+    // ---------- the hidden close ----------
+
+    #[test]
+    fn close_is_fixed_at_ten_seconds_from_the_secret_and_early_calls() {
+        let mut s = Slot::new(0, 255);
+        open_t(&mut s, ROUND, start() - 30).unwrap();
+        place_call(&mut s, ROUND, start() + 2, key(1), UP, MIN_STAKE, [1; 32]).unwrap();
+        place_call(&mut s, ROUND, start() + 5, key(2), DOWN, MIN_STAKE, [2; 32]).unwrap();
+        tick(&mut s, start() + 9, 100, start() + 9);
+        assert_eq!(s.seeded, 0, "not before 10 s");
+        tick(&mut s, start() + 10, 100, start() + 10);
+        assert_eq!(s.seeded, 1);
+        assert_eq!(s.seed_calls, 2);
+        assert!((CLOSE_MIN_S..=CLOSE_MAX_S).contains(&(s.offset_s as i64)));
+        // Anyone can check it after the reveal.
+        assert_eq!(recompute_offset(&s.secret, &s.calls[..2]), s.offset_s);
+        // Later calls don't move it.
+        let fixed = s.offset_s;
+        place_call(&mut s, ROUND, start() + 11, key(3), UP, MIN_STAKE, [3; 32]).unwrap();
+        tick(&mut s, start() + 11, 100, start() + 11);
+        assert_eq!(s.offset_s, fixed);
+        assert_eq!(s.seed_calls, 2);
     }
 
     #[test]
-    fn randomness_only_once_and_only_in_time() {
+    fn with_no_calls_the_close_comes_from_the_secret_alone() {
         let mut s = Slot::new(0, 255);
-        open(&mut s, ROUND, start() - 30).unwrap();
-        set_randomness(&mut s, &rnd(5), start() + CLOSE_MIN_S); // too late
-        assert!(!s.vrf_ready);
-        set_randomness(&mut s, &rnd(5), start() - 1);
-        assert_eq!(s.offset_s, 15);
-        set_randomness(&mut s, &rnd(30), start());
-        assert_eq!(s.offset_s, 15, "second callback ignored");
+        open_t(&mut s, ROUND, start() - 30).unwrap();
+        tick(&mut s, start() + 10, 100, start() + 10);
+        assert_eq!(s.offset_s, recompute_offset(&SECRET, &[]));
+    }
+
+    #[test]
+    fn the_keeper_cannot_predict_the_close_once_a_player_has_called() {
+        // Same secret, one early call, different player nonces: the close moves
+        // almost every time, so knowing the secret alone isn't enough.
+        let mut moved = 0;
+        for n in 0..200u8 {
+            let call = |nonce: [u8; 32]| CallEntry { player: key(1), nonce, amount: MIN_STAKE, side: UP, ..Default::default() };
+            let mut a = [n; 32];
+            a[31] = 1;
+            let mut b = [n; 32];
+            b[31] = 2;
+            if recompute_offset(&SECRET, &[call(a)]) != recompute_offset(&SECRET, &[call(b)]) {
+                moved += 1;
+            }
+        }
+        assert!(moved > 180, "moved {moved}/200");
+    }
+
+    #[test]
+    fn players_cannot_predict_the_close_without_the_secret() {
+        let call = CallEntry { player: key(1), nonce: [5; 32], amount: MIN_STAKE, side: UP, ..Default::default() };
+        let mut moved = 0;
+        for n in 0..200u8 {
+            if recompute_offset(&[n; 32], &[call]) != recompute_offset(&[n.wrapping_add(1); 32], &[call]) {
+                moved += 1;
+            }
+        }
+        assert!(moved > 180, "moved {moved}/200");
+    }
+
+    #[test]
+    fn a_late_first_tick_still_fixes_the_close_then_voids_if_it_passed() {
+        let mut s = Slot::new(0, 255);
+        open_t(&mut s, ROUND, start() - 30).unwrap();
+        // Keeper was down until 60 s: close is fixed, and since it has passed
+        // by more than the allowed gap, the round voids instead of settling late.
+        tick(&mut s, start() + 60, 100, start() + 60);
+        assert_eq!(s.seeded, 1);
+        assert_eq!((s.outcome, s.void_reason), (VOID, VOID_MISSED_TICK));
     }
 
     // ---------- tick ----------
@@ -361,16 +453,6 @@ mod tests {
         tick(&mut s, start() + 53, p + 10, start() + 53);
         assert_eq!((s.settle, s.settle_ts), (p + 10, start() + 53));
         assert_eq!(s.outcome, PENDING);
-    }
-
-    #[test]
-    fn no_randomness_by_ten_seconds_voids() {
-        let mut s = Slot::new(0, 255);
-        open(&mut s, ROUND, start() - 30).unwrap();
-        tick(&mut s, start() + 9, 1, start() + 9);
-        assert_eq!(s.outcome, PENDING);
-        tick(&mut s, start() + 10, 1, start() + 10);
-        assert_eq!((s.outcome, s.void_reason), (VOID, VOID_NO_RANDOMNESS));
     }
 
     #[test]
@@ -410,36 +492,36 @@ mod tests {
     #[test]
     fn calls_open_from_start_until_fifty_seconds() {
         let mut s = open_round(30);
-        err(place_call(&mut s, ROUND, start() - 1, key(1), UP, MIN_STAKE), BlindsideError::CallsClosed);
-        err(place_call(&mut s, ROUND, start() + 50, key(1), UP, MIN_STAKE), BlindsideError::CallsClosed);
-        place_call(&mut s, ROUND, start(), key(1), UP, MIN_STAKE).unwrap();
-        place_call(&mut s, ROUND, start() + 49, key(2), DOWN, MIN_STAKE).unwrap();
-        err(place_call(&mut s, ROUND + 1, start() + 1, key(3), UP, MIN_STAKE), BlindsideError::RoundNotOpen);
+        err(pc(&mut s, ROUND, start() - 1, key(1), UP, MIN_STAKE), BlindsideError::CallsClosed);
+        err(pc(&mut s, ROUND, start() + 50, key(1), UP, MIN_STAKE), BlindsideError::CallsClosed);
+        pc(&mut s, ROUND, start(), key(1), UP, MIN_STAKE).unwrap();
+        pc(&mut s, ROUND, start() + 49, key(2), DOWN, MIN_STAKE).unwrap();
+        err(pc(&mut s, ROUND + 1, start() + 1, key(3), UP, MIN_STAKE), BlindsideError::RoundNotOpen);
     }
 
     #[test]
     fn call_validation() {
         let mut s = open_round(30);
         let t = start() + 1;
-        err(place_call(&mut s, ROUND, t, key(1), 0, MIN_STAKE), BlindsideError::BadSide);
-        err(place_call(&mut s, ROUND, t, key(1), UP, MIN_STAKE - 1), BlindsideError::BadStake);
-        err(place_call(&mut s, ROUND, t, key(1), UP, MAX_STAKE + 1), BlindsideError::BadStake);
-        place_call(&mut s, ROUND, t, key(1), UP, MAX_STAKE).unwrap();
-        err(place_call(&mut s, ROUND, t, key(1), DOWN, MIN_STAKE), BlindsideError::AlreadyCalled);
+        err(pc(&mut s, ROUND, t, key(1), 0, MIN_STAKE), BlindsideError::BadSide);
+        err(pc(&mut s, ROUND, t, key(1), UP, MIN_STAKE - 1), BlindsideError::BadStake);
+        err(pc(&mut s, ROUND, t, key(1), UP, MAX_STAKE + 1), BlindsideError::BadStake);
+        pc(&mut s, ROUND, t, key(1), UP, MAX_STAKE).unwrap();
+        err(pc(&mut s, ROUND, t, key(1), DOWN, MIN_STAKE), BlindsideError::AlreadyCalled);
         for i in 2..=MAX_CALLS as u8 {
-            place_call(&mut s, ROUND, t, key(i), DOWN, MIN_STAKE).unwrap();
+            pc(&mut s, ROUND, t, key(i), DOWN, MIN_STAKE).unwrap();
         }
-        err(place_call(&mut s, ROUND, t, key(200), UP, MIN_STAKE), BlindsideError::RoundFull);
+        err(pc(&mut s, ROUND, t, key(200), UP, MIN_STAKE), BlindsideError::RoundFull);
     }
 
     #[test]
     fn a_call_counts_only_if_it_lands_before_the_strike_tick() {
         let mut s = open_round(20);
-        place_call(&mut s, ROUND, start() + 20, key(1), UP, 5 * ONE_USDC).unwrap(); // same second, before tick
+        pc(&mut s, ROUND, start() + 20, key(1), UP, 5 * ONE_USDC).unwrap(); // same second, before tick
         tick(&mut s, start() + 20, 100, start() + 20);
-        place_call(&mut s, ROUND, start() + 20, key(2), UP, 7 * ONE_USDC).unwrap(); // after tick
-        assert!(!s.calls[0].late);
-        assert!(s.calls[1].late);
+        pc(&mut s, ROUND, start() + 20, key(2), UP, 7 * ONE_USDC).unwrap(); // after tick
+        assert_eq!(s.calls[0].late, 0);
+        assert_eq!(s.calls[1].late, 1);
         assert_eq!(s.up_pool, 5 * ONE_USDC, "late stake not in the pool");
     }
 
@@ -450,7 +532,7 @@ mod tests {
             let mut s = open_round(offset);
             for t in 0..MAX_CALLS as i64 {
                 tick(&mut s, start() + t, 100, start() + t);
-                let r = place_call(&mut s, ROUND, start() + t, key(t as u8 + 1), UP, MIN_STAKE);
+                let r = pc(&mut s, ROUND, start() + t, key(t as u8 + 1), UP, MIN_STAKE);
                 assert!(r.is_ok(), "offset {offset} t {t}");
             }
         }
@@ -470,12 +552,12 @@ mod tests {
 
     fn played(offset: u8, strike: i64, settle: i64) -> Slot {
         let mut s = open_round(offset);
-        place_call(&mut s, ROUND, start() + 1, key(1), UP, 10 * ONE_USDC).unwrap();
-        place_call(&mut s, ROUND, start() + 2, key(2), UP, 5 * ONE_USDC).unwrap();
-        place_call(&mut s, ROUND, start() + 3, key(3), DOWN, 9 * ONE_USDC).unwrap();
+        pc(&mut s, ROUND, start() + 1, key(1), UP, 10 * ONE_USDC).unwrap();
+        pc(&mut s, ROUND, start() + 2, key(2), UP, 5 * ONE_USDC).unwrap();
+        pc(&mut s, ROUND, start() + 3, key(3), DOWN, 9 * ONE_USDC).unwrap();
         let close = start() + offset as i64;
         tick(&mut s, close, strike, close);
-        place_call(&mut s, ROUND, close, key(4), DOWN, 20 * ONE_USDC).unwrap(); // late
+        pc(&mut s, ROUND, close, key(4), DOWN, 20 * ONE_USDC).unwrap(); // late
         tick(&mut s, close + HOLD_S, settle, close + HOLD_S);
         reveal(&mut s, start() + REVEAL_S).unwrap();
         s
@@ -510,7 +592,7 @@ mod tests {
         }
 
         let mut s = open_round(20);
-        place_call(&mut s, ROUND, start() + 1, key(1), UP, MIN_STAKE).unwrap();
+        pc(&mut s, ROUND, start() + 1, key(1), UP, MIN_STAKE).unwrap();
         reveal(&mut s, start() + REVEAL_S).unwrap(); // keeper never ticked
         assert_eq!((s.outcome, s.void_reason), (VOID, VOID_NO_PRICE));
     }
@@ -518,7 +600,7 @@ mod tests {
     #[test]
     fn one_sided_round_refunds() {
         let mut s = open_round(20);
-        place_call(&mut s, ROUND, start() + 1, key(1), UP, 3 * ONE_USDC).unwrap();
+        pc(&mut s, ROUND, start() + 1, key(1), UP, 3 * ONE_USDC).unwrap();
         tick(&mut s, start() + 20, 100, start() + 20);
         tick(&mut s, start() + 50, 105, start() + 50);
         reveal(&mut s, start() + REVEAL_S).unwrap();
@@ -533,7 +615,7 @@ mod tests {
         let stakes = [1_000_001u64, 2_333_333, 7_777_777, 1_000_000, 3_141_592, 25_000_000];
         for (i, a) in stakes.iter().enumerate() {
             let side = if i % 3 == 0 { DOWN } else { UP };
-            place_call(&mut s, ROUND, start() + 1, key(i as u8 + 1), side, *a).unwrap();
+            pc(&mut s, ROUND, start() + 1, key(i as u8 + 1), side, *a).unwrap();
         }
         tick(&mut s, start() + 20, 100, start() + 20);
         tick(&mut s, start() + 50, 103, start() + 50);
@@ -549,8 +631,8 @@ mod tests {
     #[test]
     fn claims_pay_once_and_only_after_reveal() {
         let mut s = open_round(20);
-        place_call(&mut s, ROUND, start() + 1, key(1), UP, 4 * ONE_USDC).unwrap();
-        place_call(&mut s, ROUND, start() + 1, key(2), DOWN, 4 * ONE_USDC).unwrap();
+        pc(&mut s, ROUND, start() + 1, key(1), UP, 4 * ONE_USDC).unwrap();
+        pc(&mut s, ROUND, start() + 1, key(2), DOWN, 4 * ONE_USDC).unwrap();
         err(claim(&mut s, key(1)), BlindsideError::NotRevealed);
         tick(&mut s, start() + 20, 100, start() + 20);
         tick(&mut s, start() + 50, 90, start() + 50);

@@ -384,8 +384,9 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
+ "bytemuck",
  "ephemeral-rollups-sdk",
- "ephemeral-vrf-sdk",
+ "solana-sha256-hasher 2.3.0",
 ]
 
 [[package]]

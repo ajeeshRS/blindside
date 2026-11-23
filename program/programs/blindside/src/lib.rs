@@ -2,9 +2,11 @@
 //!
 //! Every 90 s a round runs on the wall clock (round = floor(unix / 90)):
 //!
-//!   0–50 s   calls are accepted. Somewhere in 10–50 s (MagicBlock VRF picks the
-//!            second) the round secretly closes: the price at that moment becomes
-//!            the starting price. Calls that landed after it are refunded.
+//!   0–50 s   calls are accepted. Somewhere in 10–50 s the round secretly closes:
+//!            the price at that moment becomes the starting price. Calls that
+//!            landed after it are refunded. The close second is fixed at 10 s
+//!            from the keeper's secret and every player's nonce so far, so no
+//!            single party can predict it (see `logic.rs`).
 //!   +30 s    the result price is recorded.
 //!   80 s     the round is revealed: close time, prices, pools and calls go public.
 //!
@@ -13,9 +15,10 @@
 //!   * Private Ephemeral Rollup (TEE): 8 reusable round slots with NO readers
 //!     until the reveal, and each player's balance (readable only by them).
 //!
-//! Opening, ticking, revealing and paying out are permissionless and gated by
-//! the clock, so no admin can steer a running round. The rules themselves are
-//! plain functions in `logic.rs`, unit-tested there.
+//! Opening a round needs the keeper key (it seeds the secret). Ticking,
+//! revealing and paying out are permissionless and gated by the clock, so no
+//! one can steer a running round. The rules themselves are plain functions in
+//! `logic.rs`, unit-tested there.
 
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
@@ -27,10 +30,6 @@ use ephemeral_rollups_sdk::access_control::structs::{Member, MembersArgs};
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::commit_and_undelegate_accounts;
-use ephemeral_vrf_sdk::anchor::{vrf, vrf_callback};
-use ephemeral_vrf_sdk::consts::{program_identity_pubkey, DEFAULT_EPHEMERAL_QUEUE};
-use ephemeral_vrf_sdk::instructions::{create_request_randomness_ix_const, RequestRandomnessParams};
-use ephemeral_vrf_sdk::types::SerializableAccountMeta;
 
 pub mod constants;
 pub mod errors;
@@ -42,8 +41,6 @@ use errors::BlindsideError;
 use state::*;
 
 declare_id!("G3KohYDjCbTwQ6nfsR9MWBJjBkwmM1xGMiAc4J4uGJMQ");
-
-const PROGRAM_IDENTITY: Pubkey = program_identity_pubkey(&crate::ID);
 
 fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
@@ -99,10 +96,12 @@ pub mod blindside {
     pub fn init_slot(ctx: Context<InitSlot>, index: u8) -> Result<()> {
         require!((index as u64) < SLOTS, BlindsideError::WrongSlot);
         let bump = ctx.bumps.slot;
-        // The account starts zeroed, which is an empty slot; set it in place
-        // (a whole `Slot` on the stack is over Solana's 4 KB frame limit).
-        ctx.accounts.slot.index = index;
-        ctx.accounts.slot.bump = bump;
+        {
+            // Zeroed is an empty slot; just stamp its index and bump.
+            let mut slot = ctx.accounts.slot.load_init()?;
+            slot.index = index;
+            slot.bump = bump;
+        }
 
         CreatePermissionCpiBuilder::new(&ctx.accounts.permission_program)
             .permissioned_account(&ctx.accounts.slot.to_account_info())
@@ -249,13 +248,16 @@ pub mod blindside {
     // Private Ephemeral Rollup
     // =====================================================================
 
-    /// Start a round in its slot (make it private again if it was revealed)
-    /// and ask MagicBlock VRF for the hidden close.
-    pub fn open_round(ctx: Context<OpenRound>, round: u64, client_seed: u8) -> Result<()> {
-        let was_public = ctx.accounts.slot.status == STATUS_REVEALED;
-        logic::open(&mut ctx.accounts.slot, round, now()?)?;
-
-        let (index, bump) = (ctx.accounts.slot.index, ctx.accounts.slot.bump);
+    /// Start a round in its slot with the keeper's secret, making the slot
+    /// private again if the previous round was revealed. The secret travels
+    /// in this transaction's message, which the private rollup hides.
+    pub fn open_round(ctx: Context<OpenRound>, round: u64, secret: [u8; 32]) -> Result<()> {
+        let (index, bump, was_public) = {
+            let mut slot = ctx.accounts.slot.load_mut()?;
+            let was_public = slot.status == STATUS_REVEALED;
+            logic::open(&mut slot, round, now()?, secret)?;
+            (slot.index, slot.bump, was_public)
+        };
         if was_public {
             UpdatePermissionCpiBuilder::new(&ctx.accounts.permission_program)
                 .authority(&ctx.accounts.slot.to_account_info(), true)
@@ -265,34 +267,6 @@ pub mod blindside {
                 .invoke_signed(&[&[SLOT_SEED, &[index], &[bump]]])?;
         }
 
-        let mut caller_seed = [client_seed; 32];
-        caller_seed[..8].copy_from_slice(&round.to_le_bytes());
-        let ix = create_request_randomness_ix_const(
-            RequestRandomnessParams {
-                payer: ctx.accounts.payer.key(),
-                oracle_queue: ctx.accounts.oracle_queue.key(),
-                callback_program_id: crate::ID,
-                callback_discriminator: instruction::ConsumeRandomness::DISCRIMINATOR.to_vec(),
-                caller_seed,
-                accounts_metas: Some(vec![SerializableAccountMeta {
-                    pubkey: ctx.accounts.slot.key(),
-                    is_signer: false,
-                    is_writable: true,
-                }]),
-                ..Default::default()
-            },
-            PROGRAM_IDENTITY,
-        );
-        // Persist the reset before the CPI reads the slot.
-        ctx.accounts.slot.exit(&crate::ID)?;
-        ctx.accounts
-            .invoke_signed_vrf(&ctx.accounts.payer.to_account_info(), &ix)?;
-        Ok(())
-    }
-
-    /// VRF callback: fixes the hidden close inside the private slot.
-    pub fn consume_randomness(ctx: Context<ConsumeRandomness>, randomness: [u8; 32]) -> Result<()> {
-        logic::set_randomness(&mut ctx.accounts.slot, &randomness, now()?);
         Ok(())
     }
 
@@ -302,21 +276,29 @@ pub mod blindside {
         let data = ctx.accounts.feed.try_borrow_data()?;
         let (price, publish) = logic::read_feed(&data).unwrap_or((0, 0));
         drop(data);
-        logic::tick(&mut ctx.accounts.slot, now()?, price, publish);
+        logic::tick(&mut *ctx.accounts.slot.load_mut()?, now()?, price, publish);
         Ok(())
     }
 
     /// Make a call. Debits the stake now; late calls are refunded at the reveal.
-    pub fn place_call(ctx: Context<PlaceCall>, round: u64, side: u8, amount: u64) -> Result<()> {
+    /// `nonce` is random bytes from the player's device (mixed into the close).
+    pub fn place_call(
+        ctx: Context<PlaceCall>,
+        round: u64,
+        side: u8,
+        amount: u64,
+        nonce: [u8; 32],
+    ) -> Result<()> {
         let player = &mut ctx.accounts.player;
         require!(player.balance >= amount, BlindsideError::InsufficientBalance);
         logic::place_call(
-            &mut ctx.accounts.slot,
+            &mut *ctx.accounts.slot.load_mut()?,
             round,
             now()?,
             player.owner,
             side,
             amount,
+            nonce,
         )?;
         player.balance -= amount;
         player.pending = player.pending.checked_add(1).ok_or(BlindsideError::Overflow)?;
@@ -325,9 +307,11 @@ pub mod blindside {
 
     /// At 80 s: decide the outcome and make the whole round public.
     pub fn reveal(ctx: Context<Reveal>) -> Result<()> {
-        logic::reveal(&mut ctx.accounts.slot, now()?)?;
-        let (index, bump) = (ctx.accounts.slot.index, ctx.accounts.slot.bump);
-        ctx.accounts.slot.exit(&crate::ID)?;
+        let (index, bump) = {
+            let mut slot = ctx.accounts.slot.load_mut()?;
+            logic::reveal(&mut slot, now()?)?;
+            (slot.index, slot.bump)
+        };
         UpdatePermissionCpiBuilder::new(&ctx.accounts.permission_program)
             .authority(&ctx.accounts.slot.to_account_info(), true)
             .permissioned_account(&ctx.accounts.slot.to_account_info(), true)
@@ -341,7 +325,7 @@ pub mod blindside {
     /// Pay a player's call out to their balance. Anyone can call it.
     pub fn claim(ctx: Context<Claim>) -> Result<()> {
         let owner = ctx.accounts.player.owner;
-        let amount = logic::claim(&mut ctx.accounts.slot, owner)?;
+        let amount = logic::claim(&mut *ctx.accounts.slot.load_mut()?, owner)?;
         let p = &mut ctx.accounts.player;
         p.balance = p.balance.checked_add(amount).ok_or(BlindsideError::Overflow)?;
         p.pending = p.pending.saturating_sub(1);
@@ -430,8 +414,8 @@ pub struct InitSlot<'info> {
     pub admin: Signer<'info>,
     #[account(seeds = [CONFIG_SEED], bump = config.bump, has_one = admin)]
     pub config: Account<'info, Config>,
-    #[account(init, payer = admin, space = 8 + Slot::INIT_SPACE, seeds = [SLOT_SEED, &[index]], bump)]
-    pub slot: Box<Account<'info, Slot>>,
+    #[account(init, payer = admin, space = 8 + Slot::SIZE, seeds = [SLOT_SEED, &[index]], bump)]
+    pub slot: AccountLoader<'info, Slot>,
     /// CHECK: permission PDA for `slot`, created by the permission program.
     #[account(mut)]
     pub permission: UncheckedAccount<'info>,
@@ -545,35 +529,26 @@ pub struct DelegatePlayer<'info> {
     pub validator: UncheckedAccount<'info>,
 }
 
-#[vrf]
 #[derive(Accounts)]
 pub struct OpenRound<'info> {
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    #[account(mut, seeds = [SLOT_SEED, &[slot.index]], bump = slot.bump)]
-    pub slot: Box<Account<'info, Slot>>,
+    /// The keeper: only it can seed a round's secret.
+    pub admin: Signer<'info>,
+    #[account(seeds = [CONFIG_SEED], bump = config.bump, has_one = admin)]
+    pub config: Account<'info, Config>,
+    #[account(mut, seeds = [SLOT_SEED, &[slot.load()?.index]], bump = slot.load()?.bump)]
+    pub slot: AccountLoader<'info, Slot>,
     /// CHECK: permission PDA for `slot`; the permission program checks it.
     #[account(mut)]
     pub permission: UncheckedAccount<'info>,
     /// CHECK: MagicBlock permission program.
     #[account(address = PERMISSION_PROGRAM)]
     pub permission_program: UncheckedAccount<'info>,
-    /// CHECK: MagicBlock's ephemeral VRF oracle queue.
-    #[account(mut, address = DEFAULT_EPHEMERAL_QUEUE)]
-    pub oracle_queue: UncheckedAccount<'info>,
-}
-
-#[vrf_callback]
-#[derive(Accounts)]
-pub struct ConsumeRandomness<'info> {
-    #[account(mut, seeds = [SLOT_SEED, &[slot.index]], bump = slot.bump)]
-    pub slot: Box<Account<'info, Slot>>,
 }
 
 #[derive(Accounts)]
 pub struct Tick<'info> {
-    #[account(mut, seeds = [SLOT_SEED, &[slot.index]], bump = slot.bump)]
-    pub slot: Box<Account<'info, Slot>>,
+    #[account(mut, seeds = [SLOT_SEED, &[slot.load()?.index]], bump = slot.load()?.bump)]
+    pub slot: AccountLoader<'info, Slot>,
     /// CHECK: the SOL/USD price feed; layout read in `logic::read_feed`.
     #[account(address = SOL_USD_FEED, owner = PRICE_PROGRAM @ BlindsideError::BadFeed)]
     pub feed: UncheckedAccount<'info>,
@@ -593,15 +568,15 @@ pub struct PlaceCall<'info> {
     #[account(
         mut,
         seeds = [SLOT_SEED, &[logic::slot_index(round)]],
-        bump = slot.bump,
+        bump = slot.load()?.bump,
     )]
-    pub slot: Box<Account<'info, Slot>>,
+    pub slot: AccountLoader<'info, Slot>,
 }
 
 #[derive(Accounts)]
 pub struct Reveal<'info> {
-    #[account(mut, seeds = [SLOT_SEED, &[slot.index]], bump = slot.bump)]
-    pub slot: Box<Account<'info, Slot>>,
+    #[account(mut, seeds = [SLOT_SEED, &[slot.load()?.index]], bump = slot.load()?.bump)]
+    pub slot: AccountLoader<'info, Slot>,
     /// CHECK: permission PDA for `slot`; the permission program checks it.
     #[account(mut)]
     pub permission: UncheckedAccount<'info>,
@@ -612,8 +587,8 @@ pub struct Reveal<'info> {
 
 #[derive(Accounts)]
 pub struct Claim<'info> {
-    #[account(mut, seeds = [SLOT_SEED, &[slot.index]], bump = slot.bump)]
-    pub slot: Box<Account<'info, Slot>>,
+    #[account(mut, seeds = [SLOT_SEED, &[slot.load()?.index]], bump = slot.load()?.bump)]
+    pub slot: AccountLoader<'info, Slot>,
     #[account(mut, seeds = [PLAYER_SEED, player.owner.as_ref()], bump = player.bump)]
     pub player: Account<'info, Player>,
 }

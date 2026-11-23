@@ -25,7 +25,10 @@ anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.32.1", features = ["token", "associated_token"] }
 # 0.18.x matches MagicBlock's public TEE (Private Ephemeral Rollup) endpoints.
 ephemeral-rollups-sdk = { version = "=0.18.0", features = ["anchor-compat", "access-control"] }
-ephemeral-vrf-sdk = { version = "=0.18.0", features = ["anchor-compat"] }
+# SHA-256 via the on-chain syscall (sha2 when testing on the host).
+solana-sha256-hasher = "2.3.0"
+# Zero-copy round slots; arrays longer than 32 need min_const_generics.
+bytemuck = { version = "1.24", features = ["derive", "min_const_generics"] }
 
 
 [lints.rust]

@@ -27,6 +27,7 @@ pub const VOID: u8 = 3;
 
 /// Why a round was voided (everyone refunded).
 pub const VOID_NONE: u8 = 0;
+/// (Used by the VRF version; kept so reason codes stay stable.)
 pub const VOID_NO_RANDOMNESS: u8 = 1;
 pub const VOID_STALE_PRICE: u8 = 2;
 pub const VOID_MISSED_TICK: u8 = 3;
@@ -34,34 +35,35 @@ pub const VOID_NO_PRICE: u8 = 4;
 pub const VOID_TIE: u8 = 5;
 pub const VOID_ONE_SIDED: u8 = 6;
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, InitSpace, Debug, PartialEq)]
+/// One call in a round. Zero-copy layout: 80 bytes, no implicit padding.
+#[zero_copy]
+#[derive(Default, Debug, PartialEq)]
 pub struct CallEntry {
     pub player: Pubkey,
+    /// Random value from the player's device. Calls made before the close is
+    /// fixed (10 s) are mixed into it, so the keeper can't predict it either.
+    pub nonce: [u8; 32],
     /// Stake in test-USDC base units.
     pub amount: u64,
     /// UP or DOWN.
     pub side: u8,
-    /// Landed after the secret close: refunded at the reveal, never counted.
-    pub late: bool,
-    pub claimed: bool,
+    /// 1 if it landed after the secret close: refunded at the reveal, never counted.
+    pub late: u8,
+    /// 1 once paid out.
+    pub claimed: u8,
+    pub _pad: [u8; 5],
 }
 
 /// One reusable round slot (round % SLOTS). Lives in the Private Ephemeral
 /// Rollup with a permission that has no readers until the reveal, so the
 /// close time, the starting price and the pools stay hidden while it runs.
-#[account]
-#[derive(InitSpace, Debug)]
+///
+/// Zero-copy (read in place) because it's ~4 KB, over Solana's 4 KB stack
+/// frame. Wide fields first so the layout has no implicit padding.
+#[account(zero_copy)]
+#[derive(Debug)]
 pub struct Slot {
-    pub index: u8,
-    pub bump: u8,
     pub round: u64,
-    pub status: u8,
-    /// Seconds after the round start when calls stop counting (10..=50).
-    pub offset_s: u8,
-    pub vrf_ready: bool,
-    /// UP, DOWN, VOID or PENDING.
-    pub outcome: u8,
-    pub void_reason: u8,
     /// Starting price (raw feed units, 1e-8 USD) and when it was recorded.
     pub strike: i64,
     pub strike_ts: i64,
@@ -71,54 +73,47 @@ pub struct Slot {
     /// Counted (on-time) stakes per side.
     pub up_pool: u64,
     pub down_pool: u64,
+    /// The keeper's secret for this round, set at open. Public after the reveal.
+    pub secret: [u8; 32],
+    /// Running hash: H(secret), then H(prev ‖ player ‖ nonce) per early call.
+    pub entropy: [u8; 32],
+    pub calls: [CallEntry; MAX_CALLS],
+    pub index: u8,
+    pub bump: u8,
+    pub status: u8,
+    /// Seconds after the round start when calls stop counting (10..=50).
+    /// Zero until it is fixed at 10 s.
+    pub offset_s: u8,
+    /// 1 once the close is fixed.
+    pub seeded: u8,
+    /// How many calls (in order) were mixed into the close.
+    pub seed_calls: u8,
+    /// UP, DOWN, VOID or PENDING.
+    pub outcome: u8,
+    pub void_reason: u8,
     pub call_count: u8,
     pub claimed_count: u8,
-    pub calls: [CallEntry; MAX_CALLS],
+    pub _pad: [u8; 6],
 }
 
 impl Slot {
+    pub const SIZE: usize = core::mem::size_of::<Slot>();
+
     /// Clear the round fields in place, keeping `index` and `bump`.
     pub fn reset(&mut self) {
-        self.round = 0;
-        self.status = STATUS_EMPTY;
-        self.offset_s = 0;
-        self.vrf_ready = false;
-        self.outcome = PENDING;
-        self.void_reason = VOID_NONE;
-        self.strike = 0;
-        self.strike_ts = 0;
-        self.settle = 0;
-        self.settle_ts = 0;
-        self.up_pool = 0;
-        self.down_pool = 0;
-        self.call_count = 0;
-        self.claimed_count = 0;
-        for c in self.calls.iter_mut() {
-            *c = CallEntry::default();
-        }
+        let (index, bump) = (self.index, self.bump);
+        // Zero in place: building a fresh Slot would put ~4 KB on the stack.
+        bytemuck::bytes_of_mut(self).fill(0);
+        self.index = index;
+        self.bump = bump;
     }
 
-    /// An empty slot (used by tests; on chain the account starts zeroed).
+    /// An empty slot (on chain the account starts zeroed, which is the same).
     pub fn new(index: u8, bump: u8) -> Self {
-        Slot {
-            index,
-            bump,
-            round: 0,
-            status: STATUS_EMPTY,
-            offset_s: 0,
-            vrf_ready: false,
-            outcome: PENDING,
-            void_reason: VOID_NONE,
-            strike: 0,
-            strike_ts: 0,
-            settle: 0,
-            settle_ts: 0,
-            up_pool: 0,
-            down_pool: 0,
-            call_count: 0,
-            claimed_count: 0,
-            calls: [CallEntry::default(); MAX_CALLS],
-        }
+        let mut s: Slot = bytemuck::Zeroable::zeroed();
+        s.index = index;
+        s.bump = bump;
+        s
     }
 }
 
