@@ -1,0 +1,21 @@
+{
+  "name": "@blindside/keeper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runs the Blindside round clock on MagicBlock's private rollup, plus one-time devnet setup.",
+  "scripts": {
+    "start": "tsx keeper.ts",
+    "setup": "tsx setup.ts",
+    "probe": "tsx probe.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@blindside/client": "workspace:*",
+    "@solana/web3.js": "1.98.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}
