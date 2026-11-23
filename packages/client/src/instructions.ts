@@ -94,3 +94,34 @@ export const claim = (tee: BlindsideProgram, index: number, owner: PublicKey) =>
 /** Bring the player's balance back to the base layer (then `withdrawRaw`). */
 export const leave = (tee: BlindsideProgram) =>
   tee.methods.leave().accountsPartial({ user: me(tee) }).rpc(ER_OPTS);
+
+// ---------------- instruction builders (for bundling into one approval) ----------------
+
+export const faucetIx = (base: BlindsideProgram) =>
+  base.methods.faucet().accounts({ user: me(base), mint: mintPda() }).instruction();
+
+export const joinIx = (base: BlindsideProgram) =>
+  base.methods
+    .join()
+    .accountsPartial({ user: me(base), permission: permissionAccounts(playerPda(me(base))).permission })
+    .instruction();
+
+export const depositIx = (base: BlindsideProgram, amountUsdc: number) =>
+  base.methods.deposit(usdc(amountUsdc)).accountsPartial(fundsAccounts(me(base))).instruction();
+
+export const withdrawIx = (base: BlindsideProgram, amount: BN) =>
+  base.methods.withdraw(amount).accountsPartial(fundsAccounts(me(base))).instruction();
+
+export function delegatePlayerIx(base: BlindsideProgram) {
+  const p = permissionAccounts(playerPda(me(base)));
+  return base.methods
+    .delegatePlayer()
+    .accountsPartial({
+      user: me(base),
+      permission: p.permission,
+      permissionBuffer: p.permissionBuffer,
+      permissionRecord: p.permissionRecord,
+      permissionMetadata: p.permissionMetadata,
+    })
+    .instruction();
+}

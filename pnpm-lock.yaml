@@ -109,6 +109,12 @@ importers:
 
   web:
     dependencies:
+      '@blindside/client':
+        specifier: workspace:*
+        version: link:../packages/client
+      '@coral-xyz/anchor':
+        specifier: 0.32.1
+        version: 0.32.1(bufferutil@4.2.0)(typescript@5.9.3)
       '@number-flow/react':
         specifier: 0.6.2
         version: 0.6.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -145,6 +151,9 @@ importers:
       tailwind-merge:
         specifier: 3.7.1
         version: 3.7.1
+      tweetnacl:
+        specifier: 1.0.3
+        version: 1.0.3
     devDependencies:
       '@tailwindcss/turbopack':
         specifier: 4.3.3

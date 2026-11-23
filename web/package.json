@@ -20,7 +20,10 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sonner": "2.0.8",
-    "tailwind-merge": "3.7.1"
+    "tailwind-merge": "3.7.1",
+    "@blindside/client": "workspace:*",
+    "@coral-xyz/anchor": "0.32.1",
+    "tweetnacl": "1.0.3"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",

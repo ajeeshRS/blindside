@@ -24,8 +24,9 @@ export function recomputeOffset(
 ): number {
   let e = sha256(concat(new TextEncoder().encode("blindside"), secret));
   for (const c of calls) e = sha256(concat(e, c.player.toBytes(), c.nonce));
-  let r = 0n;
-  for (let i = 7; i >= 0; i--) r = (r << 8n) | BigInt(e[i]);
+  // BigInt() calls rather than 0n literals, so ES2017 targets (the web app) compile.
+  let r = BigInt(0);
+  for (let i = 7; i >= 0; i--) r = (r << BigInt(8)) | BigInt(e[i]);
   const span = BigInt(ROUND.closeMax - ROUND.closeMin + 1);
   return ROUND.closeMin + Number(r % span);
 }

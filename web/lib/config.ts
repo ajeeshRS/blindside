@@ -1,3 +1,4 @@
+import { ROUND as CLIENT_ROUND } from "@blindside/client";
 import { PublicKey } from "@solana/web3.js";
 
 /** MagicBlock Ephemeral Rollup (devnet, Asia) — serves the Pyth Lazer price feeds. */
@@ -18,19 +19,20 @@ export const SOL_USD_FEED = new PublicKey(
   "ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXksS4jPu",
 );
 
-/** Blindside program. Rounds stay closed until this is set. */
-export const BLINDSIDE_PROGRAM_ID = process.env.NEXT_PUBLIC_BLINDSIDE_PROGRAM_ID
-  ? new PublicKey(process.env.NEXT_PUBLIC_BLINDSIDE_PROGRAM_ID)
-  : null;
+/** Set NEXT_PUBLIC_ROUNDS_PAUSED=1 to show the live price with calls closed. */
+export const ROUNDS_PAUSED = process.env.NEXT_PUBLIC_ROUNDS_PAUSED === "1";
 
-/** Fixed 90-second round cycle (seconds from round open). */
+/**
+ * Fixed 90-second round cycle (seconds from round open), from the shared
+ * client so the web app, keeper and program can't disagree.
+ */
 export const ROUND = {
-  cycle: 90,
-  sureUntil: 10,
-  closeLatest: 50,
-  revealAt: 80,
-  resultUntil: 90,
-  holdAfterClose: 30,
+  cycle: CLIENT_ROUND.cycle,
+  sureUntil: CLIENT_ROUND.closeMin,
+  closeLatest: CLIENT_ROUND.closeMax,
+  revealAt: CLIENT_ROUND.reveal,
+  resultUntil: CLIENT_ROUND.cycle,
+  holdAfterClose: CLIENT_ROUND.hold,
 } as const;
 
 export const STAKES_USDC = [1, 5, 10, 25] as const;

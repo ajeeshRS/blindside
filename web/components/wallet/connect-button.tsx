@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { devnetExplorerUrl } from "@/lib/config";
 import { cn } from "@/lib/cn";
 import { shortAddress } from "@/lib/format";
+import { TestWalletName } from "@/lib/blindside/test-wallet";
 
 const SUGGESTED = [
   { name: "Phantom", url: "https://phantom.com/download" },
@@ -17,7 +18,15 @@ const SUGGESTED = [
   { name: "Backpack", url: "https://backpack.app/download" },
 ];
 
-export function ConnectButton({ size = "sm", className }: { size?: "sm" | "md"; className?: string }) {
+export function ConnectButton({
+  size = "sm",
+  variant = "primary",
+  className,
+}: {
+  size?: "sm" | "md";
+  variant?: "primary" | "secondary";
+  className?: string;
+}) {
   const { publicKey, connecting, wallet } = useWallet();
   const [open, setOpen] = useState(false);
 
@@ -27,6 +36,7 @@ export function ConnectButton({ size = "sm", className }: { size?: "sm" | "md"; 
     <>
       <Button
         size={size}
+        variant={variant}
         className={className}
         onClick={() => setOpen(true)}
         disabled={connecting}
@@ -41,8 +51,11 @@ export function ConnectButton({ size = "sm", className }: { size?: "sm" | "md"; 
 
 function WalletModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { wallets, select } = useWallet();
+  const test = wallets.find((w) => w.adapter.name === TestWalletName);
   const detected = wallets.filter(
-    (w) => w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable,
+    (w) =>
+      w.adapter.name !== TestWalletName &&
+      (w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable),
   );
 
   // With autoConnect on, selecting a wallet starts the connection.
@@ -56,8 +69,24 @@ function WalletModal({ open, onClose }: { open: boolean; onClose: () => void }) 
       open={open}
       onClose={onClose}
       title="Connect a wallet"
-      description="Blindside runs on Solana devnet. You'll sign once to play without pop-ups."
+      description="Blindside runs on Solana devnet with test funds."
     >
+      {test && (
+        <button
+          onClick={() => choose(test.adapter.name)}
+          className="mb-12 flex h-60 w-full items-center gap-12 rounded-10 bg-bg-brand-soft px-14 text-left shadow-[inset_0_0_0_1px_hsl(var(--bg-brand)/40%)] transition-colors hover:bg-[hsl(var(--brand-50)/22%)]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={test.adapter.icon} alt="" className="size-28 rounded-6" />
+          <span className="flex-1">
+            <span className="block text-[15px] font-[600]">Play instantly</span>
+            <span className="block text-[12px] text-text-secondary">
+              A devnet test wallet in this browser. No install, no pop-ups.
+            </span>
+          </span>
+          <span className="text-label text-text-brand">No install</span>
+        </button>
+      )}
       {detected.length > 0 ? (
         <ul className="flex flex-col gap-8">
           {detected.map((w) => (

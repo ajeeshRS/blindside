@@ -3,8 +3,10 @@ import { Keypair } from "@solana/web3.js";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import nacl from "tweetnacl";
-import { baseConnection, createProgram, teeConnection, teeLogin, type AnchorWallet } from "./src/program";
+import { keypairSigner, keypairWallet } from "./src/keypair";
+import { baseConnection, createProgram, teeConnection, teeLogin } from "./src/program";
+
+export { keypairSigner, keypairWallet };
 
 export function loadKeypair(
   path = process.env.ANCHOR_WALLET ?? join(homedir(), ".config/solana/id.json"),
@@ -25,29 +27,6 @@ export function loadKeeperKeypair() {
   if (secret) return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(secret)));
   return loadKeypair(KEEPER_KEYPAIR_PATH);
 }
-
-export function keypairWallet(kp: Keypair): AnchorWallet {
-  return {
-    publicKey: kp.publicKey,
-    signTransaction: async (tx) => {
-      if ("version" in tx) tx.sign([kp]);
-      else tx.partialSign(kp);
-      return tx;
-    },
-    signAllTransactions: async (txs) => {
-      for (const tx of txs) {
-        if ("version" in tx) tx.sign([kp]);
-        else tx.partialSign(kp);
-      }
-      return txs;
-    },
-  };
-}
-
-export const keypairSigner = (kp: Keypair) => ({
-  publicKey: kp.publicKey,
-  signMessage: async (m: Uint8Array) => nacl.sign.detached(m, kp.secretKey),
-});
 
 export const baseProgramFor = (kp: Keypair, rpc = process.env.BASE_RPC) =>
   createProgram(baseConnection(rpc), keypairWallet(kp));

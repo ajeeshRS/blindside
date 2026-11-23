@@ -6,4 +6,5 @@ export * from "./src/program";
 export * from "./src/instructions";
 export * from "./src/accounts";
 export * from "./src/verify";
+export * from "./src/keypair";
 export { BN } from "@coral-xyz/anchor";

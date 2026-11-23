@@ -1,20 +1,16 @@
-import { BLINDSIDE_PROGRAM_ID, ROUND } from "./config";
+import { ROUND, ROUNDS_PAUSED } from "./config";
 
 export type RoundAvailability =
   | { available: true }
   | { available: false; reason: string };
 
 /**
- * Rounds come only from the Blindside program on devnet. Until it is deployed
- * and NEXT_PUBLIC_BLINDSIDE_PROGRAM_ID is set, the app shows real market data
- * and keeps calls closed — it never invents a round.
+ * Rounds come only from the Blindside program on devnet (run by the keeper).
+ * They can be paused with NEXT_PUBLIC_ROUNDS_PAUSED; the app never invents one.
  */
 export function roundAvailability(): RoundAvailability {
-  if (!BLINDSIDE_PROGRAM_ID) {
-    return {
-      available: false,
-      reason: "Rounds open once the Blindside program is live on devnet.",
-    };
+  if (ROUNDS_PAUSED) {
+    return { available: false, reason: "Rounds are paused for maintenance." };
   }
   return { available: true };
 }
