@@ -10,15 +10,15 @@ Built for MagicBlock Solana Blitz v10, *Entertainment Finance*.
 
 | Time | What happens |
 | --- | --- |
-| 0–50 s | Call **Higher** or **Lower** with test USDC. MagicBlock VRF has picked a secret second in 10–50 s: the close. |
+| 0–50 s | Call **Higher** or **Lower** with test USDC. At 10 s a secret second in 10–50 s is fixed: the close. It comes from the keeper's secret mixed with every early caller's random nonce, so nobody can predict it. |
 | close | The live SOL price becomes the starting price. Calls that landed after it are refunded, never counted. |
 | close + 30 s | The result price is recorded. |
-| 80 s | Reveal: close time, prices, pools and every call become public, with proof. |
+| 80 s | Reveal: close time, prices, pools and every call become public. Anyone can recompute the close from the revealed secret and nonces. |
 | after | Winners split the losing side pro-rata. |
 
 ## What's real
 
-Everything: the live Pyth Lazer SOL/USD feed on MagicBlock, real devnet transactions, real VRF and a real TEE. Funds are test USDC from an in-app faucet and have no value. Nothing is simulated.
+Everything: the live Pyth Lazer SOL/USD feed on MagicBlock, real devnet transactions and a real TEE. Funds are test USDC from an in-app faucet and have no value. Nothing is simulated.
 
 ## Repository
 

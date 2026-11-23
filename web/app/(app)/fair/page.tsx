@@ -8,8 +8,8 @@ export const metadata: Metadata = { title: "How it's fair" };
 
 const SECTIONS = [
   {
-    title: "The close is picked before the round opens",
-    body: "MagicBlock VRF draws a random moment between 10 and 50 seconds. The draw comes with a proof anyone can verify after the reveal, so the close can't be moved once a round starts.",
+    title: "Nobody can predict the close, not even us",
+    body: "At 10 seconds the close is fixed somewhere between 10 and 50 seconds. It's mixed from our secret and a random value from every player who called so far. We never see players' values and players never see our secret. After the reveal, anyone can recompute it.",
   },
   {
     title: "The starting price is set at the close",
@@ -35,16 +35,16 @@ const TRUST = [
     sees: "Nothing about the close or the pools until the reveal.",
   },
   {
-    who: "MagicBlock's VRF operators",
-    sees: "The random value they generate. They don't see the round's other private state.",
+    who: "The keeper (us)",
+    sees: "Our own secret, but not players' random values, so we can't work out the close once anyone else has called in the first 10 seconds.",
   },
   {
     who: "Anyone with physical access to the enclave machines",
     sees: "Research such as TEE.fail (Oct 2025) shows Intel TDX memory can be read with physical access. Stakes are small and a hidden close is only worth one round.",
   },
   {
-    who: "The Blindside team",
-    sees: "Nothing. Round accounts have no readers, and program upgrades are locked before mainnet.",
+    who: "Our admin key",
+    sees: "No round data. Round accounts have no readers, and program upgrades get locked before mainnet.",
   },
 ];
 

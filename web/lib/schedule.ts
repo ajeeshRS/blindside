@@ -4,7 +4,7 @@ import { ROUND } from "./config";
  * The fixed 90-second round clock. Rounds start on wall-clock multiples of 90 s
  * (UTC), so every client — and the program — agrees on where a round is
  * without talking to anyone. The hidden close falls somewhere in
- * [start + 10 s, start + 50 s]; only VRF knows where.
+ * [start + 10 s, start + 50 s]; nobody knows where until the reveal.
  */
 export type ScheduleState = {
   round: number;
