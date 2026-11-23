@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Anchor / Rust
+program/target/
+program/.anchor/
+program/test-ledger/
+**/*.rs.bk
+
+# secrets — never commit keys or env files
+.env
+.env*
+!.env.example
+*-keypair.json
+id.json
+
+# local tooling
+.DS_Store
+.vercel
+.claude/settings.local.json
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor/agent tooling
+.claude/

@@ -1,0 +1,10 @@
+packages:
+  - web
+  - program
+  - keeper
+  - packages/*
+
+# Native build scripts we don't need (Next uses its own image pipeline here).
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver

@@ -1,0 +1,17 @@
+{
+  "name": "blindside",
+  "private": true,
+  "description": "Fast SOL up/down rounds with a hidden close, on MagicBlock's Private Ephemeral Rollup.",
+  "packageManager": "pnpm@10.29.3",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "build:program": "pnpm --filter @blindside/program build",
+    "test:unit": "pnpm --filter @blindside/program test:unit",
+    "test:devnet": "pnpm --filter @blindside/program test:devnet",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "setup:devnet": "pnpm --filter @blindside/keeper setup",
+    "keeper": "pnpm --filter @blindside/keeper start",
+    "probe": "pnpm --filter @blindside/keeper probe"
+  }
+}
