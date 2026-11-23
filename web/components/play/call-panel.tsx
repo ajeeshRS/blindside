@@ -205,11 +205,11 @@ export function CallPanel() {
               {thisRound.side === SIDE.up ? "Higher" : "Lower"} · {thisRound.amount} USDC
             </p>
             <p className="mt-4 text-[12px] text-text-tertiary">
-              Hidden until the reveal
-              {sched && sched.t < ROUND.revealAt
-                ? ` in ${formatCountdown((sched.roundStart + ROUND.revealAt * 1000) - now)}`
-                : ""}
-              .
+              {sched && sched.t >= ROUND.revealAt
+                ? "Revealed. See the chart."
+                : `Hidden until the reveal${
+                    sched ? ` in ${formatCountdown(sched.roundStart + ROUND.revealAt * 1000 - now)}` : ""
+                  }.`}
             </p>
           </div>
         ) : (

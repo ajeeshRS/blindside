@@ -24,8 +24,28 @@ type Props = {
    * solid "now" line. Sets `--band-l`, `--band-r`, `--band-c` for overlays.
    */
   closeWindow?: boolean;
+  /**
+   * A revealed round to draw instead of the hidden band: the close line, the
+   * starting price and the 30 s that decided it. Sets `--close-x`, `--strike-y`,
+   * `--end-x`, `--settle-y` for overlays.
+   */
+  reveal?: RevealMarks | null;
   /** Overlays positioned with the `--now-x` / `--now-y` / `--band-*` CSS variables. */
   children?: React.ReactNode;
+};
+
+export type RevealMarks = {
+  /** When the starting price was recorded (ms). */
+  closeMs: number;
+  /** When the result price was recorded (ms), or null if the round voided first. */
+  endMs: number | null;
+  strike: number | null;
+  settle: number | null;
+  outcome: "up" | "down" | "void";
+  /** When the reveal started showing (ms), for the draw-in animation. */
+  at: number;
+  /** Skip the animation (reduced motion). */
+  instant?: boolean;
 };
 
 const MIN_SPAN_MS = 4_000;
@@ -59,9 +79,13 @@ export function LiveChart({
   lineWidth = 2,
   showGrid = true,
   closeWindow = false,
+  reveal = null,
   children,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Read by the draw loop every frame, so changing it doesn't restart the loop.
+  const revealRef = useRef<RevealMarks | null>(reveal);
+  revealRef.current = reveal;
   const wrapRef = useRef<HTMLDivElement>(null);
   const feed = usePriceFeed();
 
@@ -90,6 +114,12 @@ export function LiveChart({
         hatch: cssColor(el, "--brand-50", 0.14),
         bandEdge: cssColor(el, "--brand-50", 0.55),
         now: cssColor(el, "--text-primary"),
+        brand: cssColor(el, "--chart-line"),
+        up: cssColor(el, "--text-up"),
+        upSoft: cssColor(el, "--text-up", 0.12),
+        down: cssColor(el, "--text-down"),
+        downSoft: cssColor(el, "--text-down", 0.12),
+        muted: cssColor(el, "--text-tertiary"),
       };
     }
 
@@ -142,11 +172,18 @@ export function LiveChart({
       const visible = ticks.filter((t) => t.t >= start - 2_000);
       if (visible.length === 0) return;
 
+      const rv = revealRef.current;
       let min = Infinity;
       let max = -Infinity;
       for (const t of visible) {
         if (t.price < min) min = t.price;
         if (t.price > max) max = t.price;
+      }
+      // Keep the revealed prices on screen.
+      for (const p of [rv?.strike, rv?.settle]) {
+        if (p == null) continue;
+        if (p < min) min = p;
+        if (p > max) max = p;
       }
       const pad = Math.max((max - min) * 0.25, max * 0.0002);
       min -= pad;
@@ -160,8 +197,74 @@ export function LiveChart({
       wrapRef.current?.style.setProperty("--axis-w", `${axisW}px`);
       const y = (p: number) => bottom - ((p - smoothMin) / (smoothMax - smoothMin)) * (bottom - top);
 
+      // A revealed round replaces the hidden band.
+      if (rv) {
+        const k = (delay: number, dur = 500) =>
+          rv.instant ? 1 : Math.min(1, Math.max(0, (now - rv.at - delay) / dur));
+        const ease = (v: number) => 1 - Math.pow(1 - v, 3);
+        const cx = x(rv.closeMs);
+        const ex = rv.endMs ? x(rv.endMs) : null;
+        const tint = rv.outcome === "up" ? colors.upSoft : rv.outcome === "down" ? colors.downSoft : null;
+        const ink = rv.outcome === "up" ? colors.up : rv.outcome === "down" ? colors.down : colors.muted;
+        wrapRef.current?.style.setProperty("--close-x", `${cx}px`);
+        if (ex !== null) wrapRef.current?.style.setProperty("--end-x", `${ex}px`);
+
+        // 1. The close drops in.
+        const p1 = ease(k(0, 450));
+        ctx.strokeStyle = colors.brand;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.round(cx) + 0.5, 0);
+        ctx.lineTo(Math.round(cx) + 0.5, height * p1);
+        ctx.stroke();
+
+        if (rv.strike !== null) {
+          const sy = y(rv.strike);
+          wrapRef.current?.style.setProperty("--strike-y", `${sy}px`);
+          // 2. The 30 s that decided it, tinted by the outcome.
+          if (ex !== null && tint) {
+            const p2 = ease(k(450, 700));
+            ctx.fillStyle = tint;
+            ctx.fillRect(cx, 0, (ex - cx) * p2, height);
+          }
+          // 3. The starting price, drawn across.
+          const p3 = ease(k(450, 700));
+          const to = ex ?? x(now);
+          ctx.strokeStyle = colors.brand;
+          ctx.setLineDash([5, 4]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(cx, Math.round(sy) + 0.5);
+          ctx.lineTo(cx + (to - cx) * p3, Math.round(sy) + 0.5);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(cx, sy, 4.5 * p1, 0, Math.PI * 2);
+          ctx.fillStyle = colors.brand;
+          ctx.fill();
+        }
+        // 4. The result 30 s later.
+        if (ex !== null && rv.settle !== null) {
+          const p4 = ease(k(1150, 400));
+          const ty = y(rv.settle);
+          wrapRef.current?.style.setProperty("--settle-y", `${ty}px`);
+          ctx.strokeStyle = ink;
+          ctx.setLineDash([3, 4]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(Math.round(ex) + 0.5, height);
+          ctx.lineTo(Math.round(ex) + 0.5, height - height * p4);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(ex, ty, 5.5 * p4, 0, Math.PI * 2);
+          ctx.fillStyle = ink;
+          ctx.fill();
+        }
+      }
+
       // Hidden-close window, under everything else
-      if (sched) {
+      if (sched && !rv) {
         const bl = Math.max(0, x(sched.windowFrom));
         const br = Math.min(plotW, x(sched.windowTo));
         wrapRef.current?.style.setProperty("--band-l", `${bl}px`);

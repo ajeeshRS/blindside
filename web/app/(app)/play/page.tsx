@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { LiveChart } from "@/components/market/live-chart";
 import { CallPanel } from "@/components/play/call-panel";
-import { HiddenTag, NowTag, PriceHead, RoundMeta } from "@/components/play/round-clock";
+import { MarketChart } from "@/components/play/market-chart";
+import { PriceHead, RoundMeta } from "@/components/play/round-clock";
 import { Panel } from "@/components/ui/panel";
 import { roundAvailability } from "@/lib/round";
 
@@ -33,10 +33,7 @@ export default function PlayPage() {
             <RoundMeta />
           </div>
           <div className="relative mt-12 h-[240px] sm:h-[300px] md:h-[360px] lg:h-[clamp(280px,calc(100svh-330px),500px)]">
-            <LiveChart className="absolute inset-0" windowSeconds={90} closeWindow lineWidth={2}>
-              <HiddenTag />
-              <NowTag />
-            </LiveChart>
+            <MarketChart className="absolute inset-0" />
           </div>
         </Panel>
 
