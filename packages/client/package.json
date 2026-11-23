@@ -1,0 +1,26 @@
+{
+  "name": "@blindside/client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared TypeScript client for the Blindside program: addresses, round clock, connections and instruction helpers.",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./node": "./node.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.18.0",
+    "@solana/spl-token": "0.4.9",
+    "@solana/web3.js": "1.98.4",
+    "tweetnacl": "1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}
