@@ -10,7 +10,7 @@
     "test:unit": "pnpm --filter @blindside/program test:unit",
     "test:devnet": "pnpm --filter @blindside/program test:devnet",
     "typecheck": "pnpm -r --if-present typecheck",
-    "setup:devnet": "pnpm --filter @blindside/keeper setup",
+    "setup:devnet": "pnpm --filter @blindside/keeper setup:devnet",
     "keeper": "pnpm --filter @blindside/keeper start",
     "probe": "pnpm --filter @blindside/keeper probe"
   }

@@ -27,7 +27,7 @@ async function main() {
     if (!info) {
       const sig = await program.methods
         .initSlot(i)
-        .accountsPartial({ admin: admin.publicKey, permission: permissionAccounts(slot).permission })
+        .accountsPartial({ admin: admin.publicKey, slot, permission: permissionAccounts(slot).permission })
         .rpc();
       console.log(`slot ${i} created`, sig);
       info = await conn.getAccountInfo(slot);

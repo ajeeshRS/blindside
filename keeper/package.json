@@ -5,7 +5,7 @@
   "description": "Runs the Blindside round clock on MagicBlock's private rollup, plus one-time devnet setup.",
   "scripts": {
     "start": "tsx keeper.ts",
-    "setup": "tsx setup.ts",
+    "setup:devnet": "tsx setup.ts",
     "probe": "tsx probe.ts",
     "typecheck": "tsc --noEmit -p ."
   },
