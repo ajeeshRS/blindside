@@ -112,7 +112,8 @@ function MyCalls({ address, onVerify }: { address: string; onVerify: (r: RoundRe
           ))}
         </div>
         <p className="font-mono text-[12px] text-text-secondary">
-          {mine.length} calls · {settled.filter((x) => x.status === "won").length} won ·{" "}
+          {mine.length} {mine.length === 1 ? "call" : "calls"} ·{" "}
+          {settled.filter((x) => x.status === "won").length} won ·{" "}
           <span className={net > 0 ? "text-text-up" : net < 0 ? "text-text-down" : ""}>
             {net >= 0 ? "+" : ""}
             {usdc(net)} USDC
