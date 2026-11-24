@@ -69,7 +69,7 @@ export default function PrintsPage() {
       <PageHeader
         kicker="Collect"
         title="Prints"
-        description="Rare rounds leave you a print: the round's real chart, the moment it closed, and its proof. Only staked wins earn prints."
+        description="Coming after the hackathon: rare rounds will leave you a print, with the round's real chart, the moment it closed, and its proof. Only staked wins will earn prints."
       />
       <PrintsForWallet />
 

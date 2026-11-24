@@ -23,11 +23,11 @@ export default function StandingsPage() {
       />
       <EmptyState
         icon={<Trophy className="size-20" />}
-        title="The first season hasn't started"
-        body="Standings fill in from settled rounds once rounds are live on devnet. Free calls get their own table, with no rewards."
+        title="Standings are coming soon"
+        body="Rounds are live, but the season table isn't built yet. It will fill in from revealed rounds, which anyone can already verify on the History page."
         action={
           <ButtonLink href="/play" size="sm">
-            Watch the live price
+            Play a round
           </ButtonLink>
         }
       />

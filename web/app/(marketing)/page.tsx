@@ -20,19 +20,19 @@ const STEPS = [
   {
     figure: <HiddenFigure />,
     title: "Betting closes in secret",
-    body: "Each round closes at a random moment between 10 and 50 seconds. Calls that come in too late are refunded.",
+    body: "Each round closes at a random moment between 10 and 50 seconds, kept hidden inside MagicBlock's private rollup. Calls that come in too late are refunded.",
   },
   {
     figure: <RevealFigure />,
     title: "Watch the reveal",
-    body: "At 80 seconds, see when it closed, where SOL went 30 seconds later, and whether you won.",
+    body: "At 80 seconds, see when it closed, where SOL went 30 seconds later, and whether you won. Then verify the close yourself.",
   },
 ];
 
 const FAIR = [
   "Nobody knows when betting closes — not players, not bots, not us",
   "Calls placed after the close are refunded, never counted",
-  "Every round comes with a proof you can check yourself",
+  "Every round can be verified in your browser after the reveal",
 ];
 
 const FAQ = [
@@ -46,7 +46,7 @@ const FAQ = [
   },
   {
     q: "Why was my call refunded?",
-    a: "It arrived after the round's secret close. Refunds are returned in full. Calls made in the first 10 seconds of a round always count.",
+    a: "Either it arrived after the round's secret close, or nobody took the other side: winners are paid from the other side's stakes, so a round needs calls on both Higher and Lower. Refunds are returned in full. Calls made in the first 10 seconds always count.",
   },
   {
     q: "Is it real money?",
@@ -54,7 +54,11 @@ const FAQ = [
   },
   {
     q: "What do I need to play?",
-    a: "A Solana wallet such as Phantom, Solflare or Backpack. You sign once, then make calls without pop-ups.",
+    a: "Nothing to install. Press Play instantly for a devnet test wallet in your browser, with free devnet SOL and 100 test USDC. You can also use Phantom, Solflare or Backpack on devnet; they'll ask you to approve each call.",
+  },
+  {
+    q: "How is the close kept secret, and can I check it?",
+    a: "It's mixed from three things no single party holds: our secret, a random value from each early player, and MagicBlock VRF randomness. It's stored in MagicBlock's Private Ephemeral Rollup, a secure enclave nobody can read until the reveal. Afterwards everything is public, and the Verify button on the History page recomputes the close in your browser.",
   },
 ];
 
@@ -193,7 +197,8 @@ export default function LandingPage() {
             />
             <p className="mt-16 max-w-[480px] text-[16px] leading-[24px] text-text-secondary">
               When betting closes at a known time, whoever sees the price first can bet in the
-              last second. Blindside hides the close, so speed stops being an edge.
+              last second. Blindside hides the close inside MagicBlock&apos;s Private Ephemeral
+              Rollup, so speed stops being an edge.
             </p>
             <Link
               href="/fair"
@@ -292,7 +297,7 @@ export default function LandingPage() {
                 </ButtonLink>
               </div>
               <p className="mt-28 text-label text-text-tertiary">
-                Built on MagicBlock · Prices from Pyth
+                MagicBlock Private Ephemeral Rollup + VRF · Prices from Pyth · Solana devnet
               </p>
             </div>
           </div>

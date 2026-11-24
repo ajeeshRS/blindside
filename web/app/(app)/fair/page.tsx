@@ -25,7 +25,7 @@ const SECTIONS = [
   },
   {
     title: "The timing of the close can't leak",
-    body: "The program records the price on every oracle update, at the same steady rate whatever the close time is. From outside, the moment the starting price is taken looks like every other update.",
+    body: "The keeper sends a price tick every 0.4 seconds, the same way whatever the close time is, and every tick succeeds. Calls are accepted the same way all through the first 50 seconds. From outside, the moment the starting price is taken looks like every other tick.",
   },
 ];
 
@@ -39,6 +39,10 @@ const TRUST = [
     sees: "Our own secret, but not players' random values or the MagicBlock VRF value, so we can't work out the close.",
   },
   {
+    who: "MagicBlock's VRF oracle",
+    sees: "The random value it generates, but not our secret or players' values, so it can't work out the close either.",
+  },
+  {
     who: "Anyone with physical access to the enclave machines",
     sees: "Research such as TEE.fail (Oct 2025) shows Intel TDX memory can be read with physical access. Stakes are small and a hidden close is only worth one round.",
   },
@@ -49,10 +53,12 @@ const TRUST = [
 ];
 
 const FALLBACKS = [
-  "If the price feed stalls at the close or at settlement, the round is voided and every call is refunded.",
-  "If no price was recorded within 250 ms of the close, the round is voided and every call is refunded.",
-  "A round counts as paid only after the payout is confirmed on Solana.",
-  "If only one side has calls, everyone is refunded.",
+  "If the price is more than 3 seconds old at the close or at the result, the round is voided and every call is refunded.",
+  "If the price wasn't recorded within 2 seconds of the close or of the result time, the round is voided and every call is refunded. It never settles on a late price.",
+  "If MagicBlock VRF doesn't answer before 10 seconds, the close comes from our secret and players' values alone.",
+  "If only one side has calls, or the price doesn't move, everyone is refunded.",
+  "Payouts go to your game balance automatically after the reveal. Cash out moves it back to your wallet on Solana.",
+  "If the keeper stops, rounds pause; any round in progress is voided and refunded. It can't move funds.",
 ];
 
 export default function FairPage() {

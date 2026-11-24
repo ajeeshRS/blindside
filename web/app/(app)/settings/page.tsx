@@ -10,7 +10,7 @@ export default function SettingsPage() {
       <PageHeader
         kicker="Preferences"
         title="Settings"
-        description="Saved on this device. Limits apply to staked calls only."
+        description="Saved on this device."
       />
       <SettingsForm />
     </div>

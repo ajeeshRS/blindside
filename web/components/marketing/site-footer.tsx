@@ -15,13 +15,15 @@ const groups = [
     title: "Trust",
     links: [
       { href: "/fair", label: "How it's fair" },
-      { href: "/settings", label: "Limits and settings" },
+      { href: "/history", label: "Verify a round" },
+      { href: "/settings", label: "Settings" },
     ],
   },
   {
     title: "Built on",
     links: [
-      { href: "https://docs.magicblock.gg", label: "MagicBlock" },
+      { href: "https://docs.magicblock.gg", label: "MagicBlock Private ER" },
+      { href: "https://docs.magicblock.gg/pages/verifiable-randomness-functions-vrfs/introduction/technical-details", label: "MagicBlock VRF" },
       { href: "https://docs.pyth.network/lazer", label: "Pyth Lazer" },
       { href: "https://solana.com", label: "Solana" },
     ],
