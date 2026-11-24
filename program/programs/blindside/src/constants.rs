@@ -11,9 +11,9 @@ pub const SOL_USD_FEED: Pubkey = pubkey!("ENYwebBThHzmzwPLAQvCucUTsjyfBSZdD9ViXk
 pub const CONFIG_SEED: &[u8] = b"config";
 pub const MINT_SEED: &[u8] = b"mint";
 pub const VAULT_SEED: &[u8] = b"vault";
-/// v2 slots (secret + nonce close). The original "slot" accounts from the
-/// VRF version are abandoned on devnet.
-pub const SLOT_SEED: &[u8] = b"round_slot";
+/// v3 slots (secret + nonces + VRF close). Earlier "slot" and "round_slot"
+/// accounts are abandoned on devnet.
+pub const SLOT_SEED: &[u8] = b"round_slot_vrf";
 pub const PLAYER_SEED: &[u8] = b"player";
 pub const DRIP_SEED: &[u8] = b"drip";
 /// Who may open rounds (a hot key on the keeper server, separate from the
@@ -24,7 +24,8 @@ pub const KEEPER_SEED: &[u8] = b"keeper";
 /// Rounds start on wall-clock multiples of 90 s: round = floor(unix / 90).
 pub const CYCLE_S: i64 = 90;
 /// The secret close lands on a whole second in [10 s, 50 s] after the start.
-/// It is fixed at 10 s from the keeper's secret and every nonce received so far.
+/// It is fixed at 10 s from the keeper's secret, every nonce received so far,
+/// and MagicBlock VRF randomness if it arrived in time.
 pub const CLOSE_MIN_S: i64 = 10;
 pub const CLOSE_MAX_S: i64 = 50;
 /// The result is the price 30 s after the close.

@@ -15,7 +15,7 @@ const pda = (...seeds: (Buffer | Uint8Array)[]) =>
 export const configPda = () => pda(Buffer.from("config"));
 export const mintPda = () => pda(Buffer.from("mint"));
 export const vaultPda = () => pda(Buffer.from("vault"));
-export const slotPda = (index: number) => pda(Buffer.from("round_slot"), Buffer.from([index]));
+export const slotPda = (index: number) => pda(Buffer.from("round_slot_vrf"), Buffer.from([index]));
 export const playerPda = (owner: PublicKey) => pda(Buffer.from("player"), owner.toBuffer());
 export const dripPda = (owner: PublicKey) => pda(Buffer.from("drip"), owner.toBuffer());
 export const keeperRolePda = () => pda(Buffer.from("keeper"));

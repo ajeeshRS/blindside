@@ -10,10 +10,12 @@
 //! How the close is chosen (no single party controls it):
 //!   entropy₀ = H("blindside" ‖ secret)            secret: set by the keeper at open
 //!   entropyᵢ = H(entropyᵢ₋₁ ‖ playerᵢ ‖ nonceᵢ)    each call before the close is fixed
-//!   close    = 10 + u64(entropy at 10 s) mod 41   fixed by the first tick at ≥ 10 s
-//! The keeper doesn't see players' nonces and players don't see the secret, so
-//! nobody can predict the close. After the reveal, the secret and every nonce
-//! are public and anyone can recompute it (`recompute_offset`).
+//!   final    = H(entropy ‖ "vrf" ‖ vrf)           if MagicBlock VRF answered before 10 s
+//!   close    = 10 + u64(final at 10 s) mod 41     fixed by the first tick at ≥ 10 s
+//! The keeper doesn't see players' nonces or the VRF value (both hidden in the
+//! private rollup), players don't see the secret, and the VRF oracle sees
+//! neither. So nobody can predict the close. After the reveal everything is
+//! public and anyone can recompute it (`recompute_offset`).
 
 use anchor_lang::prelude::*;
 use solana_sha256_hasher::hashv;
@@ -45,12 +47,31 @@ pub fn mix(entropy: &[u8; 32], player: &Pubkey, nonce: &[u8; 32]) -> [u8; 32] {
     hashv(&[entropy, player.as_ref(), nonce]).to_bytes()
 }
 
-/// Recompute a revealed round's close from its public secret and calls.
-pub fn recompute_offset(secret: &[u8; 32], calls: &[CallEntry]) -> u8 {
+/// Fold MagicBlock VRF randomness into the entropy.
+pub fn mix_vrf(entropy: &[u8; 32], vrf: &[u8; 32]) -> [u8; 32] {
+    hashv(&[entropy, b"vrf", vrf]).to_bytes()
+}
+
+/// Recompute a revealed round's close from its public secret, calls and VRF.
+pub fn recompute_offset(secret: &[u8; 32], calls: &[CallEntry], vrf: Option<&[u8; 32]>) -> u8 {
     let e = calls
         .iter()
         .fold(initial_entropy(secret), |e, c| mix(&e, &c.player, &c.nonce));
-    close_offset(&e)
+    close_offset(&vrf.map_or(e, |v| mix_vrf(&e, v)))
+}
+
+/// VRF callback: store the randomness if it's in time (before the close is
+/// fixed at 10 s). Late or duplicate answers are ignored; the round then
+/// closes from the secret and nonces alone.
+pub fn set_randomness(slot: &mut Slot, randomness: &[u8; 32], now: i64) {
+    if slot.status != STATUS_OPEN || slot.vrf_ready == 1 || slot.seeded == 1 {
+        return;
+    }
+    if now >= round_start(slot.round) + CLOSE_MIN_S {
+        return;
+    }
+    slot.vrf = *randomness;
+    slot.vrf_ready = 1;
 }
 
 /// Read price (1e-8 USD) and publish time (unix s) from a Pyth Lazer feed
@@ -102,8 +123,13 @@ pub fn tick(slot: &mut Slot, now: i64, price: i64, publish: i64) {
         if now < start + CLOSE_MIN_S {
             return;
         }
-        // Fix the close from the secret and every call so far.
-        slot.offset_s = close_offset(&slot.entropy);
+        // Fix the close from the secret, every call so far, and VRF if it came.
+        let e = if slot.vrf_ready == 1 {
+            mix_vrf(&slot.entropy, &slot.vrf)
+        } else {
+            slot.entropy
+        };
+        slot.offset_s = close_offset(&e);
         slot.seed_calls = slot.call_count;
         slot.seeded = 1;
     }
@@ -378,7 +404,7 @@ mod tests {
         assert_eq!(s.seed_calls, 2);
         assert!((CLOSE_MIN_S..=CLOSE_MAX_S).contains(&(s.offset_s as i64)));
         // Anyone can check it after the reveal.
-        assert_eq!(recompute_offset(&s.secret, &s.calls[..2]), s.offset_s);
+        assert_eq!(recompute_offset(&s.secret, &s.calls[..2], None), s.offset_s);
         // Later calls don't move it.
         let fixed = s.offset_s;
         place_call(&mut s, ROUND, start() + 11, key(3), UP, MIN_STAKE, [3; 32]).unwrap();
@@ -392,7 +418,7 @@ mod tests {
         let mut s = Slot::new(0, 255);
         open_t(&mut s, ROUND, start() - 30).unwrap();
         tick(&mut s, start() + 10, 100, start() + 10);
-        assert_eq!(s.offset_s, recompute_offset(&SECRET, &[]));
+        assert_eq!(s.offset_s, recompute_offset(&SECRET, &[], None));
     }
 
     #[test]
@@ -406,7 +432,7 @@ mod tests {
             a[31] = 1;
             let mut b = [n; 32];
             b[31] = 2;
-            if recompute_offset(&SECRET, &[call(a)]) != recompute_offset(&SECRET, &[call(b)]) {
+            if recompute_offset(&SECRET, &[call(a)], None) != recompute_offset(&SECRET, &[call(b)], None) {
                 moved += 1;
             }
         }
@@ -418,7 +444,63 @@ mod tests {
         let call = CallEntry { player: key(1), nonce: [5; 32], amount: MIN_STAKE, side: UP, ..Default::default() };
         let mut moved = 0;
         for n in 0..200u8 {
-            if recompute_offset(&[n; 32], &[call]) != recompute_offset(&[n.wrapping_add(1); 32], &[call]) {
+            if recompute_offset(&[n; 32], &[call], None) != recompute_offset(&[n.wrapping_add(1); 32], &[call], None) {
+                moved += 1;
+            }
+        }
+        assert!(moved > 180, "moved {moved}/200");
+    }
+
+    // ---------- MagicBlock VRF ----------
+
+    #[test]
+    fn vrf_in_time_is_mixed_into_the_close() {
+        let mut s = Slot::new(0, 255);
+        open_t(&mut s, ROUND, start() - 30).unwrap();
+        place_call(&mut s, ROUND, start() + 2, key(1), UP, MIN_STAKE, [1; 32]).unwrap();
+        set_randomness(&mut s, &[42; 32], start() - 25);
+        assert_eq!(s.vrf_ready, 1);
+        tick(&mut s, start() + 10, 100, start() + 10);
+        assert_eq!(s.offset_s, recompute_offset(&s.secret, &s.calls[..1], Some(&[42; 32])));
+    }
+
+    #[test]
+    fn without_vrf_the_close_comes_from_secret_and_nonces() {
+        let mut s = Slot::new(0, 255);
+        open_t(&mut s, ROUND, start() - 30).unwrap();
+        tick(&mut s, start() + 10, 100, start() + 10);
+        assert_eq!(s.vrf_ready, 0);
+        assert_eq!(s.offset_s, recompute_offset(&SECRET, &[], None));
+    }
+
+    #[test]
+    fn late_or_duplicate_vrf_is_ignored() {
+        let mut s = Slot::new(0, 255);
+        open_t(&mut s, ROUND, start() - 30).unwrap();
+        set_randomness(&mut s, &[1; 32], start() + CLOSE_MIN_S); // too late
+        assert_eq!(s.vrf_ready, 0);
+        set_randomness(&mut s, &[2; 32], start() + 5);
+        set_randomness(&mut s, &[3; 32], start() + 6); // duplicate
+        assert_eq!(s.vrf, [2; 32]);
+        // After the close is fixed, nothing changes it.
+        tick(&mut s, start() + 10, 100, start() + 10);
+        let fixed = s.offset_s;
+        let mut late = s;
+        late.vrf_ready = 0;
+        set_randomness(&mut late, &[9; 32], start() + 11);
+        assert_eq!(late.vrf_ready, 0);
+        assert_eq!(late.offset_s, fixed);
+    }
+
+    #[test]
+    fn vrf_changes_the_close_so_the_keeper_cannot_predict_it_alone() {
+        // Same secret, no calls (the quiet-round case): different VRF values
+        // move the close almost every time.
+        let mut moved = 0;
+        for n in 0..200u8 {
+            if recompute_offset(&SECRET, &[], Some(&[n; 32]))
+                != recompute_offset(&SECRET, &[], Some(&[n.wrapping_add(1); 32]))
+            {
                 moved += 1;
             }
         }

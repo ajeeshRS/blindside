@@ -77,6 +77,9 @@ pub struct Slot {
     pub secret: [u8; 32],
     /// Running hash: H(secret), then H(prev ‖ player ‖ nonce) per early call.
     pub entropy: [u8; 32],
+    /// MagicBlock VRF randomness for this round (if it arrived before 10 s).
+    /// Public after the reveal.
+    pub vrf: [u8; 32],
     pub calls: [CallEntry; MAX_CALLS],
     pub index: u8,
     pub bump: u8,
@@ -93,7 +96,9 @@ pub struct Slot {
     pub void_reason: u8,
     pub call_count: u8,
     pub claimed_count: u8,
-    pub _pad: [u8; 6],
+    /// 1 once VRF randomness arrived in time and was stored.
+    pub vrf_ready: u8,
+    pub _pad: [u8; 5],
 }
 
 impl Slot {

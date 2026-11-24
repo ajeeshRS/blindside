@@ -15,15 +15,18 @@ const concat = (...parts: Bytes[]) => {
 
 /**
  * Recompute a revealed round's close (seconds after the start) from its
- * public secret and the calls mixed into it — the same steps as
- * `logic::recompute_offset` in the program. Anyone can run this.
+ * public secret, the calls mixed into it and the MagicBlock VRF value (if it
+ * arrived in time) — the same steps as `logic::recompute_offset` in the
+ * program. Anyone can run this.
  */
 export function recomputeOffset(
   secret: Bytes,
   calls: { player: PublicKey; nonce: Bytes }[],
+  vrf?: Bytes | null,
 ): number {
   let e = sha256(concat(new TextEncoder().encode("blindside"), secret));
   for (const c of calls) e = sha256(concat(e, c.player.toBytes(), c.nonce));
+  if (vrf) e = sha256(concat(e, new TextEncoder().encode("vrf"), vrf));
   // BigInt() calls rather than 0n literals, so ES2017 targets (the web app) compile.
   let r = BigInt(0);
   for (let i = 7; i >= 0; i--) r = (r << BigInt(8)) | BigInt(e[i]);

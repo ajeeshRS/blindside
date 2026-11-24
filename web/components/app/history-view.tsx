@@ -337,19 +337,28 @@ function VerifyModal({ result, onClose }: { result: RoundResult | null; onClose:
           </dd>
         </div>
         <div>
+          <dt className="text-label text-text-tertiary">MagicBlock VRF randomness</dt>
+          <dd className="mt-2 break-all font-mono text-[11px] text-text-secondary">
+            {result.vrf ?? "Didn't arrive before 10 s: the close came from the secret and nonces."}
+          </dd>
+        </div>
+        <div>
           <dt className="text-label text-text-tertiary">How</dt>
           <dd className="mt-2 font-mono text-[11px] leading-[17px] text-text-secondary">
             e = sha256(&quot;blindside&quot; ‖ secret)
             <br />
             for each call: e = sha256(e ‖ player ‖ nonce)
             <br />
+            if VRF arrived: e = sha256(e ‖ &quot;vrf&quot; ‖ vrf)
+            <br />
             close = 10 + (first 8 bytes of e, little-endian) mod 41
           </dd>
         </div>
       </dl>
       <p className="mt-14 text-[12px] leading-[17px] text-text-tertiary">
-        While the round ran, the secret was hidden in the private rollup and players&apos; nonces
-        were hidden from the keeper, so nobody could compute this in advance.
+        While the round ran, the secret, the nonces and the VRF value were all hidden in the
+        private rollup: the keeper never saw the nonces or the VRF value, players never saw the
+        secret, and the VRF oracle saw neither. Nobody could compute this in advance.
       </p>
     </Modal>
   );

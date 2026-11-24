@@ -386,6 +386,7 @@ dependencies = [
  "anchor-spl",
  "bytemuck",
  "ephemeral-rollups-sdk",
+ "ephemeral-vrf-sdk",
  "solana-sha256-hasher 2.3.0",
 ]
 

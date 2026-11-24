@@ -31,6 +31,12 @@ use ephemeral_rollups_sdk::access_control::structs::{Member, MembersArgs};
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::commit_and_undelegate_accounts;
+use ephemeral_vrf_sdk::anchor::{vrf, vrf_callback};
+use ephemeral_vrf_sdk::consts::{
+    program_identity_pubkey, scoped_vrf_identity_const, DEFAULT_EPHEMERAL_QUEUE,
+};
+use ephemeral_vrf_sdk::instructions::{create_request_randomness_ix_const, RequestRandomnessParams};
+use ephemeral_vrf_sdk::types::SerializableAccountMeta;
 
 pub mod constants;
 pub mod errors;
@@ -42,6 +48,13 @@ use errors::BlindsideError;
 use state::*;
 
 declare_id!("G3KohYDjCbTwQ6nfsR9MWBJjBkwmM1xGMiAc4J4uGJMQ");
+
+/// Our program's identity for VRF requests.
+const PROGRAM_IDENTITY: Pubkey = program_identity_pubkey(&crate::ID);
+/// The VRF signer on our callbacks, derived at COMPILE time. The SDK macro's
+/// default check derives it at runtime (~270k CU), which exceeds the oracle's
+/// 300k callback budget, so we declare the field ourselves.
+const VRF_IDENTITY: Pubkey = Pubkey::new_from_array(scoped_vrf_identity_const(&crate::ID).0);
 
 fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
@@ -259,8 +272,9 @@ pub mod blindside {
     // =====================================================================
 
     /// Start a round in its slot with the keeper's secret, making the slot
-    /// private again if the previous round was revealed. The secret travels
-    /// in this transaction's message, which the private rollup hides.
+    /// private again if the previous round was revealed, and ask MagicBlock
+    /// VRF for extra randomness. The secret travels in this transaction's
+    /// message, which the private rollup hides.
     pub fn open_round(ctx: Context<OpenRound>, round: u64, secret: [u8; 32]) -> Result<()> {
         let (index, bump, was_public) = {
             let mut slot = ctx.accounts.slot.load_mut()?;
@@ -277,6 +291,35 @@ pub mod blindside {
                 .invoke_signed(&[&[SLOT_SEED, &[index], &[bump]]])?;
         }
 
+        // The request sits in a PUBLIC queue account, so its seed must not
+        // contain the secret; it only needs to be unique per round.
+        let mut caller_seed = [0u8; 32];
+        caller_seed[..8].copy_from_slice(&round.to_le_bytes());
+        caller_seed[8] = index;
+        let ix = create_request_randomness_ix_const(
+            RequestRandomnessParams {
+                payer: ctx.accounts.keeper.key(),
+                oracle_queue: ctx.accounts.oracle_queue.key(),
+                callback_program_id: crate::ID,
+                callback_discriminator: instruction::ConsumeRandomness::DISCRIMINATOR.to_vec(),
+                caller_seed,
+                accounts_metas: Some(vec![SerializableAccountMeta {
+                    pubkey: ctx.accounts.slot.key(),
+                    is_signer: false,
+                    is_writable: true,
+                }]),
+                ..Default::default()
+            },
+            PROGRAM_IDENTITY,
+        );
+        ctx.accounts
+            .invoke_signed_vrf(&ctx.accounts.keeper.to_account_info(), &ix)?;
+        Ok(())
+    }
+
+    /// VRF callback: stores the randomness if it arrived before 10 s.
+    pub fn consume_randomness(ctx: Context<ConsumeRandomness>, randomness: [u8; 32]) -> Result<()> {
+        logic::set_randomness(&mut *ctx.accounts.slot.load_mut()?, &randomness, now()?);
         Ok(())
     }
 
@@ -556,9 +599,11 @@ pub struct SetKeeper<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[vrf]
 #[derive(Accounts)]
 pub struct OpenRound<'info> {
-    /// The keeper: only it can seed a round's secret.
+    /// The keeper: only it can seed a round's secret. Also pays for VRF.
+    #[account(mut)]
     pub keeper: Signer<'info>,
     #[account(seeds = [KEEPER_SEED], bump = keeper_role.bump, has_one = keeper)]
     pub keeper_role: Account<'info, KeeperRole>,
@@ -570,6 +615,20 @@ pub struct OpenRound<'info> {
     /// CHECK: MagicBlock permission program.
     #[account(address = PERMISSION_PROGRAM)]
     pub permission_program: UncheckedAccount<'info>,
+    /// CHECK: MagicBlock's ephemeral VRF queue.
+    #[account(mut, address = DEFAULT_EPHEMERAL_QUEUE)]
+    pub oracle_queue: UncheckedAccount<'info>,
+}
+
+#[vrf_callback]
+#[derive(Accounts)]
+pub struct ConsumeRandomness<'info> {
+    /// Declared here (compile-time address) so the macro doesn't add its
+    /// expensive runtime-derived check.
+    #[account(address = VRF_IDENTITY)]
+    pub vrf_program_identity: Signer<'info>,
+    #[account(mut, seeds = [SLOT_SEED, &[slot.load()?.index]], bump = slot.load()?.bump)]
+    pub slot: AccountLoader<'info, Slot>,
 }
 
 #[derive(Accounts)]

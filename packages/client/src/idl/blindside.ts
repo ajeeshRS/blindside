@@ -61,6 +61,48 @@ export type Blindside = {
       "args": []
     },
     {
+      "name": "consumeRandomness",
+      "docs": [
+        "VRF callback: stores the randomness if it arrived before 10 s."
+      ],
+      "discriminator": [
+        190,
+        217,
+        49,
+        162,
+        99,
+        26,
+        73,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "vrfProgramIdentity",
+          "docs": [
+            "Declared here (compile-time address) so the macro doesn't add its",
+            "expensive runtime-derived check."
+          ],
+          "signer": true,
+          "address": "9XLt6xYMAqspfj92QpPFXg8Mpo61Q5vrfAWGGPjEqsJa"
+        },
+        {
+          "name": "slot",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "randomness",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "delegatePlayer",
       "docs": [
         "Hand the player's balance (and, the first time, its permission) to",
@@ -1108,8 +1150,9 @@ export type Blindside = {
       "name": "openRound",
       "docs": [
         "Start a round in its slot with the keeper's secret, making the slot",
-        "private again if the previous round was revealed. The secret travels",
-        "in this transaction's message, which the private rollup hides."
+        "private again if the previous round was revealed, and ask MagicBlock",
+        "VRF for extra randomness. The secret travels in this transaction's",
+        "message, which the private rollup hides."
       ],
       "discriminator": [
         66,
@@ -1125,8 +1168,9 @@ export type Blindside = {
         {
           "name": "keeper",
           "docs": [
-            "The keeper: only it can seed a round's secret."
+            "The keeper: only it can seed a round's secret. Also pays for VRF."
           ],
+          "writable": true,
           "signer": true,
           "relations": [
             "keeperRole"
@@ -1161,6 +1205,43 @@ export type Blindside = {
         {
           "name": "permissionProgram",
           "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+        },
+        {
+          "name": "oracleQueue",
+          "writable": true,
+          "address": "5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc"
+        },
+        {
+          "name": "programIdentity",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vrfProgram",
+          "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
+        },
+        {
+          "name": "slotHashes",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -2081,6 +2162,19 @@ export type Blindside = {
             }
           },
           {
+            "name": "vrf",
+            "docs": [
+              "MagicBlock VRF randomness for this round (if it arrived before 10 s).",
+              "Public after the reveal."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
             "name": "calls",
             "type": {
               "array": [
@@ -2147,11 +2241,18 @@ export type Blindside = {
             "type": "u8"
           },
           {
+            "name": "vrfReady",
+            "docs": [
+              "1 once VRF randomness arrived in time and was stored."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "pad",
             "type": {
               "array": [
                 "u8",
-                6
+                5
               ]
             }
           }

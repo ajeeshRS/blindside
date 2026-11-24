@@ -61,6 +61,8 @@ export type RoundResult = {
   /** The keeper's secret and how many calls were mixed in: everything needed to verify. */
   secret: string;
   seedCalls: number;
+  /** MagicBlock VRF randomness mixed into the close (hex), or null if it didn't arrive in time. */
+  vrf: string | null;
   calls: {
     player: string;
     side: number;
@@ -80,7 +82,9 @@ export function toResult(slot: SlotAccount): RoundResult {
   return {
     round: slot.round.toNumber(),
     closeS: slot.offsetS,
-    verified: recomputeOffset(slot.secret, calls.slice(0, slot.seedCalls)) === slot.offsetS,
+    verified:
+      recomputeOffset(slot.secret, calls.slice(0, slot.seedCalls), slot.vrfReady ? slot.vrf : null) ===
+      slot.offsetS,
     strike: slot.strikeTs.toNumber() ? slot.strike.toNumber() / 1e8 : null,
     settle: slot.settleTs.toNumber() ? slot.settle.toNumber() / 1e8 : null,
     strikeTs: slot.strikeTs.toNumber(),
@@ -92,6 +96,7 @@ export function toResult(slot: SlotAccount): RoundResult {
     downPool: slot.downPool.toNumber() / 1e6,
     secret: hex(slot.secret),
     seedCalls: slot.seedCalls,
+    vrf: slot.vrfReady ? hex(slot.vrf) : null,
     calls: calls.map((c) => ({
       player: c.player.toBase58(),
       side: c.side,
@@ -108,6 +113,7 @@ export function verifyClose(r: RoundResult) {
   return recomputeOffset(
     fromHex(r.secret),
     r.calls.slice(0, r.seedCalls).map((c) => ({ player: new PublicKey(c.player), nonce: fromHex(c.nonce) })),
+    r.vrf ? fromHex(r.vrf) : null,
   );
 }
 

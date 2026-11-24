@@ -202,11 +202,16 @@ describe("blindside on devnet (private rollup)", function () {
       `    close at ${slot!.offsetS}s, strike ${slot!.strike.toString()} → ${slot!.settle.toString()}, outcome ${slot!.outcome}, void reason ${slot!.voidReason}`,
     );
     assert.equal(slot!.seeded, 1, "close was fixed at 10 s");
+    assert.equal(slot!.vrfReady, 1, "MagicBlock VRF answered inside the TEE before 10 s");
     assert.isAtLeast(slot!.offsetS, ROUND.closeMin);
     assert.isAtMost(slot!.offsetS, ROUND.closeMax);
     // Anyone can now check the close from the public secret and nonces.
     const mixed = slot!.calls.slice(0, slot!.seedCalls);
-    assert.equal(recomputeOffset(slot!.secret, mixed), slot!.offsetS, "close recomputes from public data");
+    assert.equal(
+      recomputeOffset(slot!.secret, mixed, slot!.vrfReady ? slot!.vrf : null),
+      slot!.offsetS,
+      "close recomputes from public data (secret, nonces, VRF)",
+    );
     assert.equal(slot!.seedCalls, 2, "both early calls were mixed into the close");
     if (slot!.outcome !== OUTCOME.void) {
       const start = roundStart(round);
