@@ -35,7 +35,9 @@ import {
   type ReactNode,
 } from "react";
 import { SOLANA_RPC_URL } from "@/lib/config";
-import { rememberCall } from "./my-calls";
+import { getArchived } from "./archive";
+import { getCalls, rememberCall } from "./my-calls";
+import { fetchResult } from "./results";
 
 /** Where the player's balance is. */
 export type PlayerStatus =
@@ -143,6 +145,24 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
       pending: live ? live.data.pending : 0,
     });
   }, [base, tee, publicKey]);
+
+  // Save results for your recent calls as soon as they're revealed, from any
+  // page: round slots are reused after ~12 minutes.
+  useEffect(() => {
+    if (!key) return;
+    const capture = () => {
+      const now = Date.now() / 1000;
+      for (const c of getCalls()) {
+        if (c.wallet !== key || getArchived(c.round)) continue;
+        const revealAt = (c.round * 90 + 80);
+        if (now < revealAt || now > revealAt + 8 * 90) continue;
+        void fetchResult(c.round).catch(() => null);
+      }
+    };
+    capture();
+    const id = setInterval(capture, 15_000);
+    return () => clearInterval(id);
+  }, [key]);
 
   useEffect(() => {
     void refresh();

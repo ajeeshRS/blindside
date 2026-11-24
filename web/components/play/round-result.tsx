@@ -25,12 +25,12 @@ export function RoundResultCard({ call }: { call: MyCall }) {
     );
   }
 
-  const mine = r.calls.find((c) => c.player.toBase58() === call.wallet);
+  const mine = r.calls.find((c) => c.player === call.wallet);
   const late = mine?.late ?? false;
   const back = payoutFor(r, call.side, call.amount, late);
   const net = back - call.amount;
   // A late call is the more specific reason, so it wins over a one-sided void.
-  const oneSided = r.outcome === "void" && r.slot.voidReason === 6 && !late;
+  const oneSided = r.outcome === "void" && r.voidCode === 6 && !late;
   const headline = late
     ? `Refunded: your call landed after the secret close (0:${String(r.closeS).padStart(2, "0")})`
     : r.outcome === "void"

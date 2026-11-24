@@ -58,13 +58,12 @@ export function MarketChart({ className }: { className?: string }) {
 
   const marks = useMemo<RevealMarks | null>(() => {
     if (!result || !shownAt) return null;
-    const s = result.slot;
-    const closeMs = s.strikeTs.toNumber()
-      ? s.strikeTs.toNumber() * 1000
+    const closeMs = result.strikeTs
+      ? result.strikeTs * 1000
       : (roundStart(result.round) + result.closeS) * 1000;
     return {
       closeMs,
-      endMs: s.settleTs.toNumber() ? s.settleTs.toNumber() * 1000 : null,
+      endMs: result.settleTs ? result.settleTs * 1000 : null,
       strike: result.strike,
       settle: result.settle,
       outcome: result.outcome,
@@ -103,14 +102,14 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
   const all = useSyncExternalStore(subscribeCalls, getCalls, () => [] as MyCall[]);
   const key = publicKey?.toBase58();
   const mine = all.find((c) => c.round === result.round && c.wallet === key);
-  const onChain = mine ? result.calls.find((c) => c.player.toBase58() === key) : undefined;
+  const onChain = mine ? result.calls.find((c) => c.player === key) : undefined;
 
   const delay = (s: number) => (instant ? 0 : s);
   const move =
     result.strike !== null && result.settle !== null ? result.settle - result.strike : null;
   const pct = move !== null && result.strike ? (move / result.strike) * 100 : null;
   const won = result.outcome === "up" ? "up" : result.outcome === "down" ? "down" : null;
-  const oneSided = result.outcome === "void" && result.slot.voidReason === 6;
+  const oneSided = result.outcome === "void" && result.voidCode === 6;
 
   let personal: { text: string; tone: "up" | "down" | "neutral" } | null = null;
   if (mine) {

@@ -1,0 +1,355 @@
+"use client";
+
+import { SIDE, roundStart, ROUND } from "@blindside/client";
+import { ArrowDown, ArrowUp, BadgeCheck, History as HistoryIcon, Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { SectionTitle } from "@/components/app/app-shell";
+import { WalletGate } from "@/components/app/wallet-gate";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Modal } from "@/components/ui/modal";
+import { Surface } from "@/components/ui/surface";
+import { getArchiveList, getArchived, subscribeArchive } from "@/lib/blindside/archive";
+import { getCalls, subscribeCalls, type MyCall } from "@/lib/blindside/my-calls";
+import { fetchRecentRounds, payoutFor, verifyClose, type RoundResult } from "@/lib/blindside/results";
+import { cn } from "@/lib/cn";
+import { useNow } from "@/lib/use-now";
+
+const usdc = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+const price = (n: number | null) => (n === null ? "—" : `$${n.toFixed(4)}`);
+const close = (s: number) => `0:${String(s).padStart(2, "0")}`;
+const short = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
+
+/** `now` comes from useNow(), which is 0 until the page is in the browser. */
+function ago(round: number, now: number) {
+  if (!now) return "";
+  const s = Math.max(0, Math.floor(now / 1000) - roundStart(round));
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(roundStart(round) * 1000).toLocaleDateString();
+}
+
+type Status = "won" | "lost" | "refunded" | "pending" | "missing";
+function statusOf(c: MyCall, r: RoundResult | null, now: number): { status: Status; net: number } {
+  if (!r) {
+    const revealAt = roundStart(c.round) + ROUND.reveal;
+    const gone = now / 1000 > revealAt + (ROUND.slots - 1) * ROUND.cycle;
+    return { status: gone ? "missing" : "pending", net: 0 };
+  }
+  const late = r.calls.find((x) => x.player === c.wallet)?.late ?? false;
+  const back = payoutFor(r, c.side, c.amount, late);
+  if (r.outcome === "void" || late) return { status: "refunded", net: 0 };
+  return back > c.amount ? { status: "won", net: back - c.amount } : { status: "lost", net: -c.amount };
+}
+
+const FILTERS = ["All", "Won", "Lost", "Refunded"] as const;
+
+export function HistoryView() {
+  const [verify, setVerify] = useState<RoundResult | null>(null);
+  return (
+    <>
+      <WalletGate
+        title="Connect to see your calls"
+        body="Your calls are remembered in this browser for the wallet you connect."
+      >
+        {(address) => <MyCalls address={address} onVerify={setVerify} />}
+      </WalletGate>
+      <RecentRounds onVerify={setVerify} />
+      <VerifyModal result={verify} onClose={() => setVerify(null)} />
+    </>
+  );
+}
+
+function MyCalls({ address, onVerify }: { address: string; onVerify: (r: RoundResult) => void }) {
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
+  const now = useNow();
+  const calls = useSyncExternalStore(subscribeCalls, getCalls, () => [] as MyCall[]);
+  useSyncExternalStore(subscribeArchive, getArchiveList, () => [] as RoundResult[]);
+  const mine = useMemo(() => calls.filter((c) => c.wallet === address), [calls, address]);
+  const rows = mine.map((c) => {
+    const r = getArchived(c.round);
+    return { c, r, ...statusOf(c, r, now) };
+  });
+  const shown = rows.filter((x) => filter === "All" || x.status === filter.toLowerCase());
+  const settled = rows.filter((x) => x.status === "won" || x.status === "lost");
+  const net = settled.reduce((n, x) => n + x.net, 0);
+
+  if (mine.length === 0) {
+    return (
+      <EmptyState
+        icon={<HistoryIcon className="size-20" />}
+        title="No calls yet"
+        body="Calls you make show up here, with the result and the proof once each round is revealed."
+        action={
+          <ButtonLink href="/play" size="sm">
+            Make a call
+          </ButtonLink>
+        }
+      />
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-14 flex flex-wrap items-center justify-between gap-12">
+        <div role="tablist" aria-label="Filter calls" className="flex flex-wrap gap-6">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              role="tab"
+              aria-selected={filter === f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "h-32 rounded-8 px-12 font-mono text-[12px] transition-colors",
+                filter === f
+                  ? "bg-bg-brand text-text-on-color"
+                  : "text-text-secondary shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))] hover:bg-bg-secondary hover:text-text-primary",
+              )}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <p className="font-mono text-[12px] text-text-secondary">
+          {mine.length} calls · {settled.filter((x) => x.status === "won").length} won ·{" "}
+          <span className={net > 0 ? "text-text-up" : net < 0 ? "text-text-down" : ""}>
+            {net >= 0 ? "+" : ""}
+            {usdc(net)} USDC
+          </span>
+        </p>
+      </div>
+
+      <Surface>
+        <div className="hidden grid-cols-[1.1fr_1fr_1.1fr_0.7fr_1.4fr_auto] gap-12 border-b border-dashed border-border-secondary-hover px-20 py-10 text-label text-text-tertiary md:grid">
+          <span>Round</span>
+          <span>Your call</span>
+          <span>Result</span>
+          <span>Close</span>
+          <span>Start → 30 s later</span>
+          <span className="w-64" />
+        </div>
+        <ul>
+          {shown.map(({ c, r, status, net: n }) => (
+            <li
+              key={c.round}
+              className="grid grid-cols-2 gap-x-12 gap-y-6 border-border-secondary px-16 py-12 not-last:border-b md:grid-cols-[1.1fr_1fr_1.1fr_0.7fr_1.4fr_auto] md:items-center md:px-20"
+            >
+              <span className="font-mono text-[13px]">
+                #{c.round.toLocaleString("en-US")}
+                <span className="block text-[11px] text-text-tertiary">{ago(c.round, now)}</span>
+              </span>
+              <span className="flex items-center gap-6 text-[14px]">
+                {c.side === SIDE.up ? (
+                  <ArrowUp className="size-14 text-text-up" aria-hidden />
+                ) : (
+                  <ArrowDown className="size-14 text-text-down" aria-hidden />
+                )}
+                {c.side === SIDE.up ? "Higher" : "Lower"} · {c.amount}
+              </span>
+              <span
+                className={cn(
+                  "text-[14px] font-[600]",
+                  status === "won" && "text-text-up",
+                  status === "lost" && "text-text-down",
+                  (status === "pending" || status === "missing") && "font-normal text-text-tertiary",
+                )}
+              >
+                {status === "won"
+                  ? `Won +${usdc(n)}`
+                  : status === "lost"
+                    ? `Lost ${usdc(-n)}`
+                    : status === "refunded"
+                      ? "Refunded"
+                      : status === "pending"
+                        ? "Waiting for the reveal"
+                        : "Not captured"}
+              </span>
+              <span className="flex items-center gap-4 font-mono text-[13px]">
+                {r ? close(r.closeS) : "—"}
+                {r?.verified && <BadgeCheck className="size-13 text-text-up" aria-label="verified" />}
+              </span>
+              <span className="font-mono text-[12px] text-text-secondary">
+                {r ? `${price(r.strike)} → ${price(r.settle)}` : "—"}
+              </span>
+              <span className="md:w-64 md:text-right">
+                {r && (
+                  <button
+                    onClick={() => onVerify(r)}
+                    className="text-[12px] font-[600] text-text-brand underline-offset-4 hover:underline"
+                  >
+                    Verify
+                  </button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Surface>
+      <p className="mt-10 text-[12px] text-text-tertiary">
+        Results are saved in this browser the moment they&apos;re revealed. &quot;Not captured&quot; means
+        the app wasn&apos;t open within ~12 minutes of that round, before its slot was reused.
+      </p>
+    </div>
+  );
+}
+
+function RecentRounds({ onVerify }: { onVerify: (r: RoundResult) => void }) {
+  const [rounds, setRounds] = useState<RoundResult[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const load = async () => {
+    setLoading(true);
+    try {
+      setRounds(await fetchRecentRounds());
+    } catch {
+      setRounds((r) => r ?? []);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+    const id = setInterval(load, 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const now = useNow();
+  const live = now ? Math.floor(now / 90_000) : 0;
+
+  return (
+    <div className="mt-48">
+      <div className="flex items-end justify-between gap-12">
+        <SectionTitle
+          index="Public"
+          description="Every revealed round still on chain (the last ~12 minutes), read straight from MagicBlock's private rollup. No wallet needed."
+        >
+          Recent rounds
+        </SectionTitle>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mb-14"
+          onClick={() => void load()}
+          disabled={loading}
+          icon={loading ? <Loader2 className="size-14 animate-spin" /> : <RefreshCw className="size-14" />}
+        >
+          Refresh
+        </Button>
+      </div>
+      <Surface>
+        {rounds === null ? (
+          <p className="flex items-center gap-8 px-20 py-16 text-[13px] text-text-tertiary">
+            <Loader2 className="size-14 animate-spin" aria-hidden /> Reading the rollup…
+          </p>
+        ) : rounds.length === 0 ? (
+          <p className="px-20 py-16 text-[13px] text-text-tertiary">No revealed rounds right now.</p>
+        ) : (
+          <ul>
+            {rounds.map((r) => (
+              <li
+                key={r.round}
+                className="grid grid-cols-2 gap-x-12 gap-y-6 border-border-secondary px-16 py-12 not-last:border-b md:grid-cols-[1.1fr_1fr_0.7fr_1.4fr_1fr_auto] md:items-center md:px-20"
+              >
+                <span className="font-mono text-[13px]">
+                  #{r.round.toLocaleString("en-US")}
+                  <span className="block text-[11px] text-text-tertiary">
+                    {live && live - r.round <= 1 ? "just now" : ago(r.round, now)}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "font-mono text-[12px]",
+                    r.outcome === "up" ? "text-text-up" : r.outcome === "down" ? "text-text-down" : "text-text-tertiary",
+                  )}
+                >
+                  {r.outcome === "up" ? "▲ Higher won" : r.outcome === "down" ? "▼ Lower won" : "Refunded"}
+                </span>
+                <span className="flex items-center gap-4 font-mono text-[13px]">
+                  {close(r.closeS)}
+                  {r.verified && <BadgeCheck className="size-13 text-text-up" aria-label="verified" />}
+                </span>
+                <span className="font-mono text-[12px] text-text-secondary">
+                  {price(r.strike)} → {price(r.settle)}
+                </span>
+                <span className="font-mono text-[12px] text-text-secondary">
+                  {r.calls.length} {r.calls.length === 1 ? "call" : "calls"} · {usdc(r.upPool)}/{usdc(r.downPool)}
+                </span>
+                <span className="md:w-64 md:text-right">
+                  <button
+                    onClick={() => onVerify(r)}
+                    className="text-[12px] font-[600] text-text-brand underline-offset-4 hover:underline"
+                  >
+                    Verify
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Surface>
+    </div>
+  );
+}
+
+function VerifyModal({ result, onClose }: { result: RoundResult | null; onClose: () => void }) {
+  const recomputed = useMemo(() => (result ? verifyClose(result) : null), [result]);
+  if (!result) return <Modal open={false} onClose={onClose} title="">{null}</Modal>;
+  const ok = recomputed === result.closeS;
+  const mixed = result.calls.slice(0, result.seedCalls);
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Verify round #${result.round.toLocaleString("en-US")}`}
+      description="Recomputed in your browser from the round's public data."
+    >
+      <div
+        className={cn(
+          "flex items-center gap-8 rounded-10 px-14 py-12 text-[14px] font-[600]",
+          ok ? "bg-bg-up-soft text-text-up" : "bg-bg-down-soft text-text-down",
+        )}
+      >
+        <BadgeCheck className="size-18" aria-hidden />
+        {ok
+          ? `Close recomputes to ${close(recomputed!)}, matching the round.`
+          : `Recomputed ${close(recomputed ?? 0)}, but the round says ${close(result.closeS)}.`}
+      </div>
+
+      <dl className="mt-14 flex flex-col gap-10 text-[13px]">
+        <div>
+          <dt className="text-label text-text-tertiary">Keeper&apos;s secret (revealed)</dt>
+          <dd className="mt-2 break-all font-mono text-[11px] text-text-secondary">{result.secret}</dd>
+        </div>
+        <div>
+          <dt className="text-label text-text-tertiary">
+            Calls mixed in before 10 s ({mixed.length})
+          </dt>
+          <dd className="mt-4 flex flex-col gap-4">
+            {mixed.length === 0 ? (
+              <span className="text-text-tertiary">None: the close came from the secret alone.</span>
+            ) : (
+              mixed.map((c) => (
+                <span key={c.player} className="font-mono text-[11px] text-text-secondary">
+                  {short(c.player)} · nonce {c.nonce.slice(0, 16)}…
+                </span>
+              ))
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-label text-text-tertiary">How</dt>
+          <dd className="mt-2 font-mono text-[11px] leading-[17px] text-text-secondary">
+            e = sha256(&quot;blindside&quot; ‖ secret)
+            <br />
+            for each call: e = sha256(e ‖ player ‖ nonce)
+            <br />
+            close = 10 + (first 8 bytes of e, little-endian) mod 41
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-14 text-[12px] leading-[17px] text-text-tertiary">
+        While the round ran, the secret was hidden in the private rollup and players&apos; nonces
+        were hidden from the keeper, so nobody could compute this in advance.
+      </p>
+    </Modal>
+  );
+}

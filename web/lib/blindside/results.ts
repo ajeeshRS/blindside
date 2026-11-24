@@ -17,8 +17,9 @@ import {
   type BlindsideProgram,
   type SlotAccount,
 } from "@blindside/client";
-import { Keypair, type PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { useEffect, useState } from "react";
+import { getArchived, saveRound } from "./archive";
 
 /**
  * Reading a revealed round needs a login to the private rollup, but not a
@@ -40,65 +41,111 @@ export function getReader() {
   return reader;
 }
 
+/** A revealed round as plain data (safe to cache in the browser). */
 export type RoundResult = {
   round: number;
+  /** Seconds after the start when the round secretly closed. */
   closeS: number;
   /** Close recomputed from the public secret and nonces matches the program's. */
   verified: boolean;
   strike: number | null;
   settle: number | null;
+  /** Unix seconds the prices were recorded (0 if not). */
+  strikeTs: number;
+  settleTs: number;
   outcome: "up" | "down" | "void";
+  voidCode: number;
   voidReason: string;
   upPool: number;
   downPool: number;
-  calls: { player: PublicKey; side: number; amount: number; late: boolean; claimed: boolean }[];
-  slot: SlotAccount;
+  /** The keeper's secret and how many calls were mixed in: everything needed to verify. */
+  secret: string;
+  seedCalls: number;
+  calls: {
+    player: string;
+    side: number;
+    amount: number;
+    late: boolean;
+    claimed: boolean;
+    nonce: string;
+  }[];
 };
 
-const usd = (raw: { toNumber(): number }) => raw.toNumber() / 1e8;
+const hex = (bytes: ArrayLike<number>) =>
+  Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+export const fromHex = (h: string) => Uint8Array.from(h.match(/../g) ?? [], (b) => parseInt(b, 16));
 
 export function toResult(slot: SlotAccount): RoundResult {
-  const n = slot.callCount;
-  const calls = slot.calls.slice(0, n);
+  const calls = slot.calls.slice(0, slot.callCount);
   return {
     round: slot.round.toNumber(),
     closeS: slot.offsetS,
     verified: recomputeOffset(slot.secret, calls.slice(0, slot.seedCalls)) === slot.offsetS,
-    strike: slot.strikeTs.toNumber() ? usd(slot.strike) : null,
-    settle: slot.settleTs.toNumber() ? usd(slot.settle) : null,
+    strike: slot.strikeTs.toNumber() ? slot.strike.toNumber() / 1e8 : null,
+    settle: slot.settleTs.toNumber() ? slot.settle.toNumber() / 1e8 : null,
+    strikeTs: slot.strikeTs.toNumber(),
+    settleTs: slot.settleTs.toNumber(),
     outcome: slot.outcome === OUTCOME.up ? "up" : slot.outcome === OUTCOME.down ? "down" : "void",
+    voidCode: slot.voidReason,
     voidReason: VOID_REASON[slot.voidReason] ?? "",
     upPool: slot.upPool.toNumber() / 1e6,
     downPool: slot.downPool.toNumber() / 1e6,
+    secret: hex(slot.secret),
+    seedCalls: slot.seedCalls,
     calls: calls.map((c) => ({
-      player: c.player,
+      player: c.player.toBase58(),
       side: c.side,
       amount: c.amount.toNumber() / 1e6,
       late: c.late === 1,
       claimed: c.claimed === 1,
+      nonce: hex(c.nonce),
     })),
-    slot,
   };
 }
 
-/** A round's revealed result, or null until it's public (or once its slot is reused). */
+/** Recompute a result's close from its public data, in this browser. */
+export function verifyClose(r: RoundResult) {
+  return recomputeOffset(
+    fromHex(r.secret),
+    r.calls.slice(0, r.seedCalls).map((c) => ({ player: new PublicKey(c.player), nonce: fromHex(c.nonce) })),
+  );
+}
+
+/** A round's revealed result: from this browser's archive, else from chain (and archived). */
 export async function fetchResult(round: number): Promise<RoundResult | null> {
+  const cached = getArchived(round);
+  if (cached) return cached;
   const r = await getReader();
   const slot = await readSlot(r, slotIndex(round));
   if (!slot || slot.round.toNumber() !== round || slot.status !== STATUS.revealed) return null;
-  return toResult(slot);
+  const result = toResult(slot);
+  saveRound(result);
+  return result;
+}
+
+/** Every revealed round still on chain (the last ~12 minutes), newest first. */
+export async function fetchRecentRounds(): Promise<RoundResult[]> {
+  const r = await getReader();
+  const slots = await Promise.all(
+    Array.from({ length: ROUND.slots }, (_, i) => readSlot(r, i).catch(() => null)),
+  );
+  const results = slots
+    .filter((s): s is SlotAccount => Boolean(s && s.status === STATUS.revealed))
+    .map(toResult)
+    .sort((a, b) => b.round - a.round);
+  results.forEach(saveRound);
+  return results;
 }
 
 /** Poll for a round's result from its reveal time. */
 export function useRoundResult(round: number | null) {
   const [result, setResult] = useState<RoundResult | null>(null);
   useEffect(() => {
-    setResult(null);
+    setResult(round === null ? null : getArchived(round));
     if (round === null) return;
-    let stop = false;
+    let stop = Boolean(getArchived(round));
     const tick = async () => {
-      const revealAt = (roundStart(round) + ROUND.reveal) * 1000;
-      if (Date.now() < revealAt) return;
+      if (Date.now() < (roundStart(round) + ROUND.reveal) * 1000) return;
       const r = await fetchResult(round).catch(() => null);
       if (!stop && r) {
         setResult(r);

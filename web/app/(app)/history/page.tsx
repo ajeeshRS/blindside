@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/app/app-shell";
-import { HistoryForWallet } from "@/components/app/history-for-wallet";
+import { HistoryView } from "@/components/app/history-view";
 
 export const metadata: Metadata = { title: "History" };
 
@@ -10,9 +10,9 @@ export default function HistoryPage() {
       <PageHeader
         kicker="Your calls"
         title="History"
-        description="Every call you've made, with its outcome and a link to the round's proof."
+        description="Every call you've made from this browser, how it went, and the proof. Anyone can verify a round's secret close."
       />
-      <HistoryForWallet />
+      <HistoryView />
     </>
   );
 }
