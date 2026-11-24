@@ -10,6 +10,7 @@ blindside = "G3KohYDjCbTwQ6nfsR9MWBJjBkwmM1xGMiAc4J4uGJMQ"
 
 [programs.devnet]
 blindside = "G3KohYDjCbTwQ6nfsR9MWBJjBkwmM1xGMiAc4J4uGJMQ"
+vrf_probe = "5QcW1XMWQbZAh1CHKGfZcagJ7jgZ5EiMofG7bqSwnsBi"
 
 [registry]
 url = "https://api.apr.dev"

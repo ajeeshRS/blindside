@@ -1,0 +1,28 @@
+[package]
+name = "vrf_probe"
+version = "0.1.0"
+description = "Throwaway probe: does MagicBlock VRF fulfil requests made inside the devnet TEE rollup?"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "vrf_probe"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = { version = "0.32.1" }
+ephemeral-rollups-sdk = { version = "=0.18.0", features = ["anchor-compat", "access-control"] }
+ephemeral-vrf-sdk = { version = "=0.18.0", features = ["anchor-compat"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
