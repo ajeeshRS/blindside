@@ -29,81 +29,105 @@ import {
 import { loadKeeperKeypair, teeProgramFor } from "@blindside/client/node";
 
 const TICK_MS = 400;
+/** Open each round this long before it starts... */
 const OPEN_BEFORE_S = 30;
-
-type Job = { opened: boolean; revealed: boolean; paid: boolean };
+/** ...and keep retrying until just before the program's open window closes (start + 5 s). */
+const OPEN_UNTIL_S = 4;
+const SWEEP_EVERY_MS = 5_000;
 
 export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; until?: () => boolean } = {}) {
   const log = (...a: unknown[]) => opts.log !== false && console.log(new Date().toISOString(), ...a);
-  const jobs = new Map<number, Job>();
-  const job = (r: number) => {
-    if (!jobs.has(r)) jobs.set(r, { opened: false, revealed: false, paid: false });
-    return jobs.get(r)!;
-  };
+  const opened = new Set<number>();
+  const paidLogged = new Set<number>();
+  const msg = (e: unknown) => (e as Error).message.slice(0, 140);
 
-  // Steady ticks for every round that could still need a price.
+  // Steady ticks for the running round. Ticking a slot that isn't running is a
+  // harmless no-op, so this also covers rounds opened before a restart.
   const ticker = setInterval(() => {
     const r = currentRound();
     const t = nowS() - roundStart(r);
-    // Round r needs ticks from its start until ~85 s (close ≤ 50 s, +30 s, +gap).
-    // Ticking a slot that isn't running is a harmless no-op, so this also covers
-    // rounds opened by another keeper or before a restart.
     if (t < ROUND.closeMax + ROUND.hold + 5) tick(tee, slotIndex(r)).catch(() => {});
   }, TICK_MS);
 
+  /**
+   * Bring one slot to rest: if it's public (revealed), pay out any unpaid
+   * calls; if it's private and its round is past the reveal time, reveal it.
+   * This also rescues rounds whose open "failed" on our side but landed, which
+   * would otherwise leave the slot stuck and block every 8th round after it.
+   */
+  async function settleSlot(index: number) {
+    const r = currentRound();
+    const next = r + 1;
+    const slot = await readSlot(tee, index).catch(() => null);
+
+    if (!slot) {
+      // Private: the running round, the next round (opened early), or a stuck one.
+      if (index === slotIndex(next) && nowS() >= roundStart(next) - OPEN_BEFORE_S) return;
+      if (index === slotIndex(r) && nowS() < roundStart(r) + ROUND.reveal) return;
+      try {
+        await reveal(tee, index);
+        const after = await readSlot(tee, index).catch(() => null);
+        log(`revealed round ${after?.round.toNumber() ?? "?"} (slot ${index})`);
+      } catch {
+        // Not revealable yet (or nothing to reveal); try again on the next sweep.
+      }
+      return;
+    }
+
+    if (slot.status !== STATUS.revealed) return;
+    const round = slot.round.toNumber();
+    const unpaid = slot.calls.slice(0, slot.callCount).filter((c) => c.claimed === 0);
+    for (const c of unpaid) {
+      await claim(tee, index, c.player).catch((e) => log(`claim ${c.player.toBase58()} failed:`, msg(e)));
+    }
+    // Log each payout once; old rounds found in a slot (e.g. rescued) are logged once too.
+    if (!paidLogged.has(round)) {
+      const after = unpaid.length ? await readSlot(tee, index).catch(() => null) : slot;
+      if (after && after.claimedCount === after.callCount) {
+        paidLogged.add(round);
+        log(`paid round ${round}: ${after.callCount} calls, outcome ${after.outcome}`);
+      }
+    }
+  }
+
+  let lastSweep = 0;
   try {
     while (!opts.until?.()) {
       const r = currentRound();
       const next = r + 1;
       const t = nowS();
 
-      // Open the next round shortly before it starts.
-      if (!job(next).opened && t >= roundStart(next) - OPEN_BEFORE_S) {
+      // Open the next round, retrying on errors until its open window closes.
+      if (
+        !opened.has(next) &&
+        t >= roundStart(next) - OPEN_BEFORE_S &&
+        t < roundStart(next) + OPEN_UNTIL_S
+      ) {
         try {
           await openRound(tee, next);
-          job(next).opened = true;
+          opened.add(next);
           log(`opened round ${next} (slot ${slotIndex(next)})`);
         } catch (e) {
-          log(`open ${next} failed:`, (e as Error).message.slice(0, 160));
-          // Don't retry every loop, and don't try to reveal a round we couldn't open.
-          job(next).opened = true;
-          job(next).paid = true;
+          log(`open ${next} failed, will retry:`, msg(e));
+          await sleep(1_500);
         }
       }
 
-      // Reveal and pay out rounds whose reveal time has passed.
-      for (const round of [r - 1, r]) {
-        const j = job(round);
-        if (!j.opened || j.paid || t < roundStart(round) + ROUND.reveal) continue;
-        const index = slotIndex(round);
-        if (!j.revealed) {
-          try {
-            await reveal(tee, index);
-            j.revealed = true;
-            log(`revealed round ${round}`);
-          } catch (e) {
-            log(`reveal ${round} failed:`, (e as Error).message.slice(0, 160));
-          }
-        }
-        if (j.revealed) {
-          const slot = await readSlot(tee, index);
-          if (slot && slot.status === STATUS.revealed && slot.round.toNumber() === round) {
-            const unpaid = slot.calls.slice(0, slot.callCount).filter((c) => c.claimed === 0);
-            for (const c of unpaid) {
-              await claim(tee, index, c.player).catch((e) =>
-                log(`claim ${c.player.toBase58()} failed:`, (e as Error).message.slice(0, 120)),
-              );
-            }
-            const after = await readSlot(tee, index);
-            if (after && after.claimedCount === after.callCount) {
-              j.paid = true;
-              log(`paid round ${round}: ${after.callCount} calls, outcome ${after.outcome}`);
-            }
-          }
-        }
+      // Sweep every slot regularly, and right after each reveal time.
+      const sinceReveal = t - roundStart(r) - ROUND.reveal;
+      const justRevealable = sinceReveal >= 0 && sinceReveal < 8 && !paidLogged.has(r);
+      if (Date.now() - lastSweep > SWEEP_EVERY_MS || justRevealable) {
+        lastSweep = Date.now();
+        for (let i = 0; i < ROUND.slots; i++) await settleSlot(i);
       }
 
-      for (const k of jobs.keys()) if (k < r - 2) jobs.delete(k);
+      for (const k of opened) if (k < r - 2) opened.delete(k);
+      // Keep the set small without forgetting rounds that may still sit in a slot.
+      if (paidLogged.size > 200) {
+        const keep = [...paidLogged].sort((x, y) => y - x).slice(0, 100);
+        paidLogged.clear();
+        keep.forEach((k) => paidLogged.add(k));
+      }
       await sleep(500);
     }
   } finally {
