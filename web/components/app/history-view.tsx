@@ -326,7 +326,9 @@ function VerifyModal({ result, onClose }: { result: RoundResult | null; onClose:
           </dt>
           <dd className="mt-4 flex flex-col gap-4">
             {mixed.length === 0 ? (
-              <span className="text-text-tertiary">None: the close came from the secret alone.</span>
+              <span className="text-text-tertiary">
+                None: the close came from the secret{result.vrf ? " and VRF" : " alone"}.
+              </span>
             ) : (
               mixed.map((c) => (
                 <span key={c.player} className="font-mono text-[11px] text-text-secondary">
