@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "How it's fair" };
 const SECTIONS = [
   {
     title: "Nobody can predict the close, not even us",
-    body: "At 10 seconds the close is fixed somewhere between 10 and 50 seconds. It's mixed from our secret and a random value from every player who called so far. We never see players' values and players never see our secret. After the reveal, anyone can recompute it.",
+    body: "At 10 seconds the close is fixed somewhere between 10 and 50 seconds. It's mixed from our secret, a random value from every player who called so far, and MagicBlock VRF randomness. We never see players' values or the VRF value, players never see our secret, and the VRF oracle sees neither. After the reveal, anyone can recompute it.",
   },
   {
     title: "The starting price is set at the close",
@@ -36,7 +36,7 @@ const TRUST = [
   },
   {
     who: "The keeper (us)",
-    sees: "Our own secret, but not players' random values, so we can't work out the close once anyone else has called in the first 10 seconds.",
+    sees: "Our own secret, but not players' random values or the MagicBlock VRF value, so we can't work out the close.",
   },
   {
     who: "Anyone with physical access to the enclave machines",

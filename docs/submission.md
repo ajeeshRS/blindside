@@ -31,13 +31,14 @@ It's Entertainment Finance: a quick, social, real-money-style game (test USDC on
 ## Technical depth (MagicBlock integration)
 
 - **Private Ephemeral Rollup:** 8 reusable round slots and every player balance are delegated to the TEE validator. Round slots use a MagicBlock permission with **no readers** until the reveal; balances are readable only by their owner. Transaction contents touching a round are hidden too.
-- **Hidden close without an oracle:** the keeper seeds a secret at open; each call adds a random nonce from the player's device. At 10 s the close is fixed from sha256 of both. The keeper never sees nonces, players never see the secret, and anyone can recompute it after the reveal. (We started with MagicBlock VRF; on devnet it isn't fulfilled on the TEE endpoint, which other builders report too.)
+- **Hidden close from three sources:** the keeper seeds a secret at open, each call adds a random nonce from the player's device, and **MagicBlock VRF** (requested from inside the TEE, answered in ~2 s) is mixed in. At 10 s the close is fixed from sha256 of all three. The keeper never sees nonces or VRF, players never see the secret, the oracle sees neither; anyone can recompute it after the reveal.
+- **Found and fixed a MagicBlock SDK issue:** the `#[vrf_callback]` macro derives the VRF signer at runtime (~270k of the oracle's 300k CU), so callbacks fail and VRF looks broken inside the TEE. A compile-time signer check fixes it; `programs/vrf_probe` reproduces it.
 - **No timing leaks:** calls are accepted identically across the public 0–50 s window; the price tick runs at a steady rate and never fails; reveal is rejected before 80 s.
 - **Pyth Lazer SOL/USD on MagicBlock**, read on-chain every 400 ms; stale prices or late ticks void and refund the round.
 - **Delegate / commit-and-undelegate** to move balances between Solana and the rollup; deposit and withdraw on Solana.
 - **Keeper with least privilege:** a separate hot key that can only open rounds; ticking, revealing and paying out are permissionless and time-gated, so it can stop but not cheat. It self-heals stuck slots.
 - **Zero-copy round accounts** (~4 KB) to fit Solana's stack.
-- **Tests:** 25 Rust unit tests for the rules; a devnet end-to-end test (10/10) that runs a real round and checks privacy from an outsider, the admin and a player.
+- **Tests:** 29 Rust unit tests for the rules; a devnet end-to-end test (10/10) that runs a real round and checks privacy from an outsider, the admin and a player, and that VRF answered and the close recomputes.
 - **UX:** one-click devnet test wallet, one-approval onboarding (gas drip, faucet, deposit, delegation, rollup sign-in), live chart with the reveal drawn in, History with in-browser verification.
 
 ## Demo video (2–3 min) shot list
