@@ -24,6 +24,16 @@ use crate::constants::*;
 use crate::errors::BlindsideError;
 use crate::state::*;
 
+/// A session key is good for `owner` until it expires.
+pub fn session_ok(expires_at: i64, now: i64) -> bool {
+    now < expires_at
+}
+
+/// A requested session expiry is in the future and within the maximum.
+pub fn session_expiry_ok(expires_at: i64, now: i64) -> bool {
+    expires_at > now && expires_at <= now + MAX_SESSION_S
+}
+
 pub fn round_start(round: u64) -> i64 {
     (round as i64) * CYCLE_S
 }
@@ -287,6 +297,21 @@ pub fn claim(slot: &mut Slot, player: Pubkey) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sessions_expire() {
+        assert!(session_ok(100, 99));
+        assert!(!session_ok(100, 100));
+        assert!(!session_ok(100, 150));
+    }
+
+    #[test]
+    fn session_expiry_is_bounded() {
+        assert!(session_expiry_ok(1_000 + 3_600, 1_000));
+        assert!(session_expiry_ok(1_000 + MAX_SESSION_S, 1_000));
+        assert!(!session_expiry_ok(1_000, 1_000));
+        assert!(!session_expiry_ok(1_000 + MAX_SESSION_S + 1, 1_000));
+    }
 
     const ROUND: u64 = 19_947_000; // slot 0 (19_947_000 % 8 == 0)
     fn start() -> i64 {

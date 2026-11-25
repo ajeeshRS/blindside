@@ -122,6 +122,19 @@ impl Slot {
     }
 }
 
+/// A temporary key a player's wallet authorised to make calls and leave on
+/// its behalf, so wallets never have to sign rollup transactions (which
+/// carry a rollup blockhash some wallets can't place). Lives on Solana; the
+/// rollup reads it. It can't withdraw: funds only leave via the wallet.
+#[account]
+#[derive(InitSpace)]
+pub struct Session {
+    pub owner: Pubkey,
+    pub key: Pubkey,
+    pub expires_at: i64,
+    pub bump: u8,
+}
+
 /// A player's in-game balance. Delegated to the private rollup while
 /// playing; only the player can read it.
 #[account]

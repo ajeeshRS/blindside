@@ -1147,6 +1147,88 @@ export type Blindside = {
       "args": []
     },
     {
+      "name": "leaveSession",
+      "docs": [
+        "`leave`, signed by the player's session key. The balance goes back to",
+        "the player's own account on Solana; only the wallet can withdraw it."
+      ],
+      "discriminator": [
+        54,
+        198,
+        240,
+        145,
+        215,
+        73,
+        7,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "sessionKey",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "session",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "session.owner",
+                "account": "session"
+              }
+            ]
+          }
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "session.owner",
+                "account": "session"
+              }
+            ]
+          }
+        },
+        {
+          "name": "magicProgram",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magicContext",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "openRound",
       "docs": [
         "Start a round in its slot with the keeper's secret, making the slot",
@@ -1300,6 +1382,103 @@ export type Blindside = {
               {
                 "kind": "account",
                 "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slot",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "round",
+          "type": "u64"
+        },
+        {
+          "name": "side",
+          "type": "u8"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "nonce",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "placeCallSession",
+      "docs": [
+        "`place_call`, signed by the player's session key instead of the wallet."
+      ],
+      "discriminator": [
+        176,
+        83,
+        135,
+        150,
+        31,
+        143,
+        206,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "sessionKey",
+          "signer": true
+        },
+        {
+          "name": "session",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "session.owner",
+                "account": "session"
+              }
+            ]
+          }
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "session.owner",
+                "account": "session"
               }
             ]
           }
@@ -1539,6 +1718,69 @@ export type Blindside = {
         {
           "name": "keeper",
           "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "setSession",
+      "docs": [
+        "Authorise a session key (base layer, signed by the wallet). Calls and",
+        "leaving can then be signed by that key on the rollup. Replaces any",
+        "earlier session."
+      ],
+      "discriminator": [
+        156,
+        135,
+        126,
+        111,
+        184,
+        206,
+        194,
+        141
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "session",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "key",
+          "type": "pubkey"
+        },
+        {
+          "name": "expiresAt",
+          "type": "i64"
         }
       ]
     },
@@ -1796,6 +2038,19 @@ export type Blindside = {
       ]
     },
     {
+      "name": "session",
+      "discriminator": [
+        243,
+        81,
+        72,
+        115,
+        214,
+        188,
+        72,
+        144
+      ]
+    },
+    {
       "name": "slot",
       "discriminator": [
         140,
@@ -1904,6 +2159,11 @@ export type Blindside = {
       "code": 6018,
       "name": "overflow",
       "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6019,
+      "name": "badSession",
+      "msg": "This session key isn't valid for this player, or it has expired"
     }
   ],
   "types": [
@@ -2075,6 +2335,36 @@ export type Blindside = {
               "Calls not yet paid out. Funds can't leave the rollup while > 0."
             ],
             "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "session",
+      "docs": [
+        "A temporary key a player's wallet authorised to make calls and leave on",
+        "its behalf, so wallets never have to sign rollup transactions (which",
+        "carry a rollup blockhash some wallets can't place). Lives on Solana; the",
+        "rollup reads it. It can't withdraw: funds only leave via the wallet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "key",
+            "type": "pubkey"
+          },
+          {
+            "name": "expiresAt",
+            "type": "i64"
           },
           {
             "name": "bump",

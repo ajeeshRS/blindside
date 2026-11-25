@@ -3,7 +3,7 @@ import { permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk
 import { PublicKey } from "@solana/web3.js";
 import { ONE_USDC, SOL_USD_FEED } from "./constants";
 import { slotIndex } from "./clock";
-import { mintPda, permissionAccounts, playerPda, slotPda, userAta, vaultPda } from "./pdas";
+import { mintPda, permissionAccounts, playerPda, sessionPda, slotPda, userAta, vaultPda } from "./pdas";
 import type { BlindsideProgram } from "./program";
 
 /** Rollup transactions: skip preflight (simulation can't see private accounts). */
@@ -125,3 +125,39 @@ export function delegatePlayerIx(base: BlindsideProgram) {
     })
     .instruction();
 }
+
+// -- Session keys ------------------------------------------------------------
+// The wallet authorises a temporary key once, on Solana. That key then signs
+// rollup transactions (calls, leaving), so wallets never have to sign a
+// transaction carrying a rollup blockhash.
+
+/** Authorise `key` for the connected wallet until `expiresAt` (unix seconds). Base layer. */
+export const setSessionIx = (base: BlindsideProgram, key: PublicKey, expiresAt: number) =>
+  base.methods.setSession(key, new BN(expiresAt)).accounts({ user: me(base) }).instruction();
+
+export const setSession = (base: BlindsideProgram, key: PublicKey, expiresAt: number) =>
+  base.methods.setSession(key, new BN(expiresAt)).accounts({ user: me(base) }).rpc();
+
+/** `program` here is a rollup program whose wallet is the session key. */
+export const placeCallSession = (
+  tee: BlindsideProgram,
+  owner: PublicKey,
+  round: number,
+  side: number,
+  amountUsdc: number,
+) =>
+  tee.methods
+    .placeCallSession(new BN(round), side, usdc(amountUsdc), random32())
+    .accountsPartial({
+      sessionKey: me(tee),
+      session: sessionPda(owner),
+      player: playerPda(owner),
+      slot: slotPda(slotIndex(round)),
+    })
+    .rpc(ER_OPTS);
+
+export const leaveSession = (tee: BlindsideProgram, owner: PublicKey) =>
+  tee.methods
+    .leaveSession()
+    .accountsPartial({ sessionKey: me(tee), session: sessionPda(owner), player: playerPda(owner) })
+    .rpc(ER_OPTS);

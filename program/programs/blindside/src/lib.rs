@@ -189,6 +189,21 @@ pub mod blindside {
         Ok(())
     }
 
+    /// Authorise a session key (base layer, signed by the wallet). Calls and
+    /// leaving can then be signed by that key on the rollup. Replaces any
+    /// earlier session.
+    pub fn set_session(ctx: Context<SetSession>, key: Pubkey, expires_at: i64) -> Result<()> {
+        require!(logic::session_expiry_ok(expires_at, now()?), BlindsideError::BadSession);
+        let owner = ctx.accounts.user.key();
+        ctx.accounts.session.set_inner(Session {
+            owner,
+            key,
+            expires_at,
+            bump: ctx.bumps.session,
+        });
+        Ok(())
+    }
+
     /// Move test USDC from the wallet into the game. Base layer, while the
     /// player account isn't delegated.
     pub fn deposit(ctx: Context<MoveFunds>, amount: u64) -> Result<()> {
@@ -358,6 +373,34 @@ pub mod blindside {
         Ok(())
     }
 
+    /// `place_call`, signed by the player's session key instead of the wallet.
+    pub fn place_call_session(
+        ctx: Context<PlaceCallSession>,
+        round: u64,
+        side: u8,
+        amount: u64,
+        nonce: [u8; 32],
+    ) -> Result<()> {
+        require!(
+            logic::session_ok(ctx.accounts.session.expires_at, now()?),
+            BlindsideError::BadSession
+        );
+        let player = &mut ctx.accounts.player;
+        require!(player.balance >= amount, BlindsideError::InsufficientBalance);
+        logic::place_call(
+            &mut *ctx.accounts.slot.load_mut()?,
+            round,
+            now()?,
+            player.owner,
+            side,
+            amount,
+            nonce,
+        )?;
+        player.balance -= amount;
+        player.pending = player.pending.checked_add(1).ok_or(BlindsideError::Overflow)?;
+        Ok(())
+    }
+
     /// At 80 s: decide the outcome and make the whole round public.
     pub fn reveal(ctx: Context<Reveal>) -> Result<()> {
         let (index, bump) = {
@@ -391,6 +434,25 @@ pub mod blindside {
         ctx.accounts.player.exit(&crate::ID)?;
         commit_and_undelegate_accounts(
             &ctx.accounts.user,
+            vec![&ctx.accounts.player.to_account_info()],
+            &ctx.accounts.magic_context,
+            &ctx.accounts.magic_program,
+            None,
+        )?;
+        Ok(())
+    }
+
+    /// `leave`, signed by the player's session key. The balance goes back to
+    /// the player's own account on Solana; only the wallet can withdraw it.
+    pub fn leave_session(ctx: Context<LeaveSession>) -> Result<()> {
+        require!(
+            logic::session_ok(ctx.accounts.session.expires_at, now()?),
+            BlindsideError::BadSession
+        );
+        require!(ctx.accounts.player.pending == 0, BlindsideError::PendingCalls);
+        ctx.accounts.player.exit(&crate::ID)?;
+        commit_and_undelegate_accounts(
+            &ctx.accounts.session_key,
             vec![&ctx.accounts.player.to_account_info()],
             &ctx.accounts.magic_context,
             &ctx.accounts.magic_program,
@@ -689,6 +751,66 @@ pub struct Leave<'info> {
         seeds = [PLAYER_SEED, user.key().as_ref()],
         bump = player.bump,
         constraint = player.owner == user.key(),
+    )]
+    pub player: Account<'info, Player>,
+}
+
+#[derive(Accounts)]
+pub struct SetSession<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+    #[account(
+        init_if_needed,
+        payer = user,
+        space = 8 + Session::INIT_SPACE,
+        seeds = [SESSION_SEED, user.key().as_ref()],
+        bump,
+    )]
+    pub session: Account<'info, Session>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(round: u64)]
+pub struct PlaceCallSession<'info> {
+    pub session_key: Signer<'info>,
+    #[account(
+        seeds = [SESSION_SEED, session.owner.as_ref()],
+        bump = session.bump,
+        constraint = session.key == session_key.key() @ BlindsideError::BadSession,
+    )]
+    pub session: Account<'info, Session>,
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, session.owner.as_ref()],
+        bump = player.bump,
+        constraint = player.owner == session.owner @ BlindsideError::BadSession,
+    )]
+    pub player: Account<'info, Player>,
+    #[account(
+        mut,
+        seeds = [SLOT_SEED, &[logic::slot_index(round)]],
+        bump = slot.load()?.bump,
+    )]
+    pub slot: AccountLoader<'info, Slot>,
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct LeaveSession<'info> {
+    #[account(mut)]
+    pub session_key: Signer<'info>,
+    #[account(
+        seeds = [SESSION_SEED, session.owner.as_ref()],
+        bump = session.bump,
+        constraint = session.key == session_key.key() @ BlindsideError::BadSession,
+    )]
+    pub session: Account<'info, Session>,
+    #[account(
+        mut,
+        seeds = [PLAYER_SEED, session.owner.as_ref()],
+        bump = player.bump,
+        constraint = player.owner == session.owner @ BlindsideError::BadSession,
     )]
     pub player: Account<'info, Player>,
 }

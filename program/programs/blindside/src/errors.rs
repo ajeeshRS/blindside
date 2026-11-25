@@ -40,4 +40,6 @@ pub enum BlindsideError {
     FaucetCooldown,
     #[msg("Arithmetic overflow")]
     Overflow,
+    #[msg("This session key isn't valid for this player, or it has expired")]
+    BadSession,
 }

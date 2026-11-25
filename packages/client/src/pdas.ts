@@ -19,6 +19,7 @@ export const slotPda = (index: number) => pda(Buffer.from("round_slot_vrf"), Buf
 export const playerPda = (owner: PublicKey) => pda(Buffer.from("player"), owner.toBuffer());
 export const dripPda = (owner: PublicKey) => pda(Buffer.from("drip"), owner.toBuffer());
 export const keeperRolePda = () => pda(Buffer.from("keeper"));
+export const sessionPda = (owner: PublicKey) => pda(Buffer.from("session"), owner.toBuffer());
 export const userAta = (owner: PublicKey) => getAssociatedTokenAddressSync(mintPda(), owner);
 
 /** The permission PDA for an account, and the delegation PDAs for that permission. */

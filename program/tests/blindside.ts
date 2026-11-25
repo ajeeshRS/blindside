@@ -24,12 +24,14 @@ import {
   faucet,
   join,
   leave,
+  leaveSession,
   nowS,
   ONE_USDC,
   openRound,
   OUTCOME,
   permissionAccounts,
   placeCall,
+  placeCallSession,
   playerPda,
   PROGRAM_ID,
   readPlayer,
@@ -38,6 +40,7 @@ import {
   reveal,
   ROUND,
   roundStart,
+  setSession,
   SIDE,
   sleep,
   sleepUntil,
@@ -73,11 +76,16 @@ describe("blindside on devnet (private rollup)", function () {
   const alice = Keypair.generate();
   const bob = Keypair.generate();
   const outsider = Keypair.generate();
+  // Bob plays like a wallet extension: his wallet authorises a session key on
+  // Solana once, and that key signs his rollup transactions.
+  const bobSession = Keypair.generate();
 
   let adminTee: BlindsideProgram;
   let keeperTee: BlindsideProgram;
   let aliceTee: BlindsideProgram;
   let bobTee: BlindsideProgram;
+  let bobSessionTee: BlindsideProgram;
+  let outsiderTee: BlindsideProgram;
   let round: number;
   let index: number;
   let ticker: NodeJS.Timeout | undefined;
@@ -101,6 +109,7 @@ describe("blindside on devnet (private rollup)", function () {
       await faucet(p);
       await join(p);
       await deposit(p, DEPOSIT);
+      if (kp === bob) await setSession(p, bobSession.publicKey, nowS() + 3600);
       await delegatePlayer(p);
     }
 
@@ -108,6 +117,8 @@ describe("blindside on devnet (private rollup)", function () {
     keeperTee = await teeProgramFor(keeper);
     aliceTee = await teeProgramFor(alice);
     bobTee = await teeProgramFor(bob);
+    bobSessionTee = await teeProgramFor(bobSession);
+    outsiderTee = await teeProgramFor(outsider);
   });
 
   after(() => ticker && clearInterval(ticker));
@@ -171,7 +182,13 @@ describe("blindside on devnet (private rollup)", function () {
 
   it("accepts calls, one per player", async () => {
     await placeCall(aliceTee, round, UP, STAKE);
-    await placeCall(bobTee, round, DOWN, STAKE);
+    await expectFailure(
+      placeCallSession(outsiderTee, bob.publicKey, round, DOWN, STAKE),
+      "a call on Bob's behalf from a key he didn't authorise",
+    );
+    // Bob's call is signed by his session key, not his wallet.
+    await placeCallSession(bobSessionTee, bob.publicKey, round, DOWN, STAKE);
+    await expectFailure(placeCallSession(bobSessionTee, bob.publicKey, round, UP, STAKE), "Bob's second call");
     await expectFailure(placeCall(aliceTee, round, DOWN, STAKE), "a second call");
     const a = await readPlayer(aliceTee, alice.publicKey);
     assert.equal(a!.data.balance.toNumber(), (DEPOSIT - STAKE) * ONE_USDC);
@@ -250,6 +267,20 @@ describe("blindside on devnet (private rollup)", function () {
     await withdrawRaw(base, p.balance);
     const after = (await getAccount(base.provider.connection, userAta(alice.publicKey))).amount;
     assert.equal(Number(after - before), p.balance.toNumber());
+  });
+
+  it("brings Bob's balance back with his session key; only his wallet can withdraw", async () => {
+    await expectFailure(leaveSession(outsiderTee, bob.publicKey), "leaving with someone else's key");
+    await leaveSession(bobSessionTee, bob.publicKey);
+    const base = baseProgramFor(bob);
+    const player = playerPda(bob.publicKey);
+    for (let i = 0; i < 40; i++) {
+      const info = await base.provider.connection.getAccountInfo(player);
+      if (info?.owner.equals(PROGRAM_ID)) break;
+      await sleep(1500);
+    }
+    const p = await base.account.player.fetch(player);
+    await withdrawRaw(base, p.balance);
   });
 
   it("keeps the permission program as the owner of round permissions", async () => {

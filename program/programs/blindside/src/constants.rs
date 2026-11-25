@@ -19,6 +19,10 @@ pub const DRIP_SEED: &[u8] = b"drip";
 /// Who may open rounds (a hot key on the keeper server, separate from the
 /// admin / upgrade authority).
 pub const KEEPER_SEED: &[u8] = b"keeper";
+/// A player's session key record (on Solana, read by the rollup).
+pub const SESSION_SEED: &[u8] = b"session";
+/// Longest a session key may stay valid.
+pub const MAX_SESSION_S: i64 = 7 * 24 * 60 * 60;
 
 // ---- The round clock (seconds). Must match web/lib/config.ts `ROUND`. ----
 /// Rounds start on wall-clock multiples of 90 s: round = floor(unix / 90).
