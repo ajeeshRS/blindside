@@ -6,7 +6,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <SiteHeader />
-      <main className="relative z-[2] rounded-b-40 bg-bg-primary">{children}</main>
+      <main>{children}</main>
       <SiteFooter />
     </>
   );

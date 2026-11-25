@@ -58,7 +58,7 @@ export function RoundResultCard({ call }: { call: MyCall }) {
       <div className="px-16 py-14 md:px-20">
         <p
           className={cn(
-            "text-[18px] leading-[24px] font-[652] tracking-[-0.2px]",
+            "text-[18px] leading-[24px] font-[700] tracking-[-0.03em]",
             net > 0 && "text-text-up",
           )}
         >

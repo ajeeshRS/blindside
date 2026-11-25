@@ -1,19 +1,20 @@
 "use client";
 
-import { History, Images, LineChart, Settings, Trophy } from "lucide-react";
+import { History, LineChart, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { Logo } from "@/components/brand/logo";
+import { capsuleIcon } from "@/components/ui/capsule-icon";
+import { NavCapsule } from "@/components/ui/nav-capsule";
+import { Kicker } from "@/components/ui/kicker";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { ConnectButton } from "@/components/wallet/connect-button";
 import { cn } from "@/lib/cn";
 
 const NAV = [
   { href: "/play", label: "Play", icon: LineChart },
-  { href: "/prints", label: "Prints", icon: Images },
-  { href: "/standings", label: "Standings", icon: Trophy },
   { href: "/history", label: "History", icon: History },
+  { href: "/fair", label: "Fairness", icon: ShieldCheck },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -22,67 +23,36 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-border-secondary bg-bg-primary/85 backdrop-blur-xl">
-        <div className="container-page flex h-60 items-center justify-between gap-16">
-          <div className="flex items-center gap-40">
-            <Link href="/" aria-label="Blindside home">
-              <Logo />
-            </Link>
-            <nav aria-label="App" className="hidden items-center gap-24 md:flex">
-              {NAV.map(({ href, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  aria-current={isActive(href) ? "page" : undefined}
-                  className={cn(
-                    "-mx-12 flex h-36 items-center px-12 text-label transition-colors ease-out",
-                    isActive(href)
-                      ? "text-text-primary"
-                      : "text-text-tertiary hover:text-text-primary",
-                  )}
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-          <div className="flex items-center gap-8">
-            <ThemeToggle className="hidden size-36 sm:flex" />
-            <Link
-              href="/settings"
-              aria-label="Settings"
-              aria-current={isActive("/settings") ? "page" : undefined}
-              className={cn(
-                "flex size-36 items-center justify-center rounded-10 transition-colors",
-                isActive("/settings")
-                  ? "bg-bg-secondary text-text-primary"
-                  : "text-text-primary hover:bg-bg-secondary",
-              )}
-            >
-              <Settings className="size-18" />
-            </Link>
-            <ConnectButton size="sm" />
-          </div>
-        </div>
-      </header>
+      <NavCapsule links={NAV.map(({ href, label }) => ({ href, label }))} label="App">
+        <ThemeToggle className={capsuleIcon("max-sm:hidden")} />
+        <Link
+          href="/settings"
+          aria-label="Settings"
+          aria-current={isActive("/settings") ? "page" : undefined}
+          className={capsuleIcon(isActive("/settings") && "bg-white/12 text-white")}
+        >
+          <Settings className="size-16" />
+        </Link>
+        <ConnectButton size="sm" className="h-38" />
+      </NavCapsule>
 
-      <main className="container-page flex-1 pb-[calc(96px+env(safe-area-inset-bottom))] pt-16 md:pb-64 md:pt-24">
+      <main className="container-page flex-1 pb-[calc(96px+env(safe-area-inset-bottom))] pt-32 md:pb-96 md:pt-56">
         {children}
       </main>
 
       {/* Mobile tab bar: every primary destination in the thumb zone */}
       <nav
         aria-label="App"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-border-secondary bg-bg-primary/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg-primary pb-[env(safe-area-inset-bottom)] md:hidden"
       >
-        <ul className="grid grid-cols-4">
+        <ul className="grid grid-cols-3">
           {NAV.map(({ href, label, icon: Icon }) => (
             <li key={href}>
               <Link
                 href={href}
                 aria-current={isActive(href) ? "page" : undefined}
                 className={cn(
-                  "flex h-56 flex-col items-center justify-center gap-4 font-mono text-[11px] transition-colors",
+                  "flex h-56 flex-col items-center justify-center gap-4 text-[11px] font-[600] transition-colors",
                   isActive(href) ? "text-text-primary" : "text-text-tertiary",
                 )}
               >
@@ -109,16 +79,14 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-24 flex flex-col gap-16 md:mb-32 md:flex-row md:items-end md:justify-between">
-      <div className="max-w-[640px]">
-        {kicker && (
-          <p className="frame mb-14 inline-flex px-12 py-6 text-label text-text-secondary">{kicker}</p>
-        )}
-        <h1 className="text-[30px] leading-[1.08] font-[652] tracking-[-0.8px] md:text-[38px] md:tracking-[-1.1px]">
+    <div className="mb-40 flex flex-col gap-16 md:mb-56 md:flex-row md:items-end md:justify-between">
+      <div className="max-w-[720px]">
+        {kicker && <Kicker className="mb-14">{kicker}</Kicker>}
+        <h1 className="text-display text-[44px] md:text-[64px]">
           {title}
         </h1>
         {description && (
-          <p className="mt-8 text-[15px] leading-[22px] text-text-secondary text-pretty">
+          <p className="mt-16 max-w-[600px] text-[17px] leading-[27px] text-text-secondary text-pretty">
             {description}
           </p>
         )}
@@ -139,11 +107,11 @@ export function SectionTitle({
   description?: string;
 }) {
   return (
-    <div className="mb-14">
-      {index && <p className="text-label text-text-tertiary">{index}</p>}
-      <h2 className="mt-4 text-[20px] leading-[26px] font-[652] tracking-[-0.3px]">{children}</h2>
+    <div className="mb-20">
+      {index && <p className="mb-6 text-label text-text-secondary">{index}</p>}
+      <h2 className="text-[26px] leading-[1.15] font-[700] tracking-[-0.035em]">{children}</h2>
       {description && (
-        <p className="mt-6 max-w-[620px] text-[15px] leading-[22px] text-text-secondary">
+        <p className="mt-8 max-w-[620px] text-[15.5px] leading-[24px] text-text-secondary">
           {description}
         </p>
       )}

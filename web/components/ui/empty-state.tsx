@@ -18,10 +18,10 @@ export function EmptyState({
         aria-hidden
         className="bg-blueprint absolute inset-0 [mask-image:radial-gradient(ellipse_45%_60%_at_50%_40%,black_10%,transparent)]"
       />
-      <div className="relative mb-16 flex size-44 items-center justify-center rounded-10 bg-bg-primary text-text-primary shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))]">
+      <div className="relative mb-16 flex size-44 items-center justify-center tile rounded-12 text-accent">
         {icon}
       </div>
-      <h2 className="relative text-[20px] leading-[26px] font-[652] tracking-[-0.3px] text-balance">
+      <h2 className="relative text-[22px] leading-[28px] font-[700] tracking-[-0.035em] text-balance">
         {title}
       </h2>
       <p className="relative mt-8 max-w-[420px] text-[15px] leading-[22px] text-text-secondary text-pretty">

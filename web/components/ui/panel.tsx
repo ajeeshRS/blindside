@@ -1,10 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-/**
- * Blueprint panel: crop-mark frame with hairline sides, an optional mono
- * header row split from the body by a dashed rule.
- */
+/** A card with an optional labelled header row. */
 export function Panel({
   label,
   meta,
@@ -19,9 +16,9 @@ export function Panel({
   as?: "section" | "div" | "aside";
 }) {
   return (
-    <Tag className={cn("frame flex flex-col border-x border-border-secondary bg-bg-primary", className)}>
+    <Tag className={cn("frame flex flex-col overflow-hidden", className)}>
       {(label || meta) && (
-        <header className="flex min-h-44 items-center justify-between gap-12 border-b border-dashed border-border-secondary-hover px-16 py-8 md:px-20">
+        <header className="flex min-h-44 items-center justify-between gap-12 px-20 pt-14 md:px-24 md:pt-16">
           {label && <h2 className="text-label text-text-secondary">{label}</h2>}
           {meta}
         </header>

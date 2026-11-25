@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Fog } from "@/components/market/fog";
-import { priceFeed, usePriceFeed } from "@/lib/price-feed";
+import { priceFeed, trend, usePriceFeed } from "@/lib/price-feed";
 import { scheduleAt } from "@/lib/schedule";
 import { cn } from "@/lib/cn";
 
@@ -49,6 +49,16 @@ export type RevealMarks = {
 };
 
 const MIN_SPAN_MS = 4_000;
+/** How fast the line colour eases to a new state (ms, time constant). */
+const COLOR_EASE_MS = 160;
+
+type RGB = [number, number, number];
+const rgbOf = (rgba: string): RGB => {
+  const [r = 0, g = 0, b = 0] = rgba.match(/[\d.]+/g)?.map(Number) ?? [];
+  return [r, g, b];
+};
+const rgba = ([r, g, b]: RGB, a = 1) =>
+  `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
 
 /**
  * Resolve an HSL-triplet CSS variable (which may itself point at another
@@ -104,12 +114,8 @@ export function LiveChart({
     function readColors() {
       const el = canvas!;
       return {
-        line: cssColor(el, "--chart-line"),
-        area: cssColor(el, "--chart-line", 0.07),
         grid: cssColor(el, "--text-tertiary", 0.18),
         label: cssColor(el, "--text-tertiary"),
-        dot: cssColor(el, "--chart-line"),
-        ring: cssColor(el, "--chart-line", 0.18),
         band: cssColor(el, "--brand-50", 0.07),
         hatch: cssColor(el, "--brand-50", 0.14),
         bandEdge: cssColor(el, "--brand-50", 0.55),
@@ -120,6 +126,10 @@ export function LiveChart({
         down: cssColor(el, "--text-down"),
         downSoft: cssColor(el, "--text-down", 0.12),
         muted: cssColor(el, "--text-tertiary"),
+        // Line colours: TradingView green/red fills, and ink while the round is sealed.
+        lineUp: rgbOf(cssColor(el, "--bg-up")),
+        lineDown: rgbOf(cssColor(el, "--bg-down")),
+        lineFlat: rgbOf(cssColor(el, "--text-primary")),
       };
     }
 
@@ -147,12 +157,20 @@ export function LiveChart({
     let raf = 0;
     let smoothMin = NaN;
     let smoothMax = NaN;
+    let lineRgb: RGB | null = null;
+    let lastFrame = performance.now();
+    const reducedMotion = () =>
+      document.documentElement.dataset.motion === "reduced" ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
     const draw = () => {
       raf = requestAnimationFrame(draw);
       ctx.clearRect(0, 0, width, height);
       const ticks = priceFeed.getTicks();
       const now = Date.now();
+      const frame = performance.now();
+      const dt = Math.min(frame - lastFrame, 100);
+      lastFrame = frame;
       // Grow the window as data arrives, so a fresh page isn't a sliver at the edge.
       const have = ticks.length ? now - ticks[0].t : 0;
       const span = Math.min(Math.max(have, MIN_SPAN_MS), windowSeconds * 1000);
@@ -319,29 +337,72 @@ export function LiveChart({
         }
       }
 
+      // Line colour. In the first 10 s (before the hidden-close window) it
+      // follows momentum over the bet's 30 s horizon. From 10 s the close may
+      // already have happened and the real starting price is secret, so the
+      // line goes neutral until the reveal: a green or red line would read as
+      // "winning" against a price nobody knows. At the reveal, only the 30 s
+      // that decided the round take the outcome's colour.
+      const beforeWindow = !rv && (!sched || sched.phase === "sure");
+      const dir = beforeWindow ? trend().dir : "flat";
+      const target = dir === "up" ? colors.lineUp : dir === "down" ? colors.lineDown : colors.lineFlat;
+      if (!lineRgb || reducedMotion()) lineRgb = [...target];
+      else {
+        const f = 1 - Math.exp(-dt / COLOR_EASE_MS);
+        lineRgb = lineRgb.map((c, i) => c + (target[i] - c) * f) as RGB;
+      }
+      const lineColor = rgba(lineRgb);
+
       // Line (step-free, last value extended to now)
       const last = visible[visible.length - 1];
-      ctx.beginPath();
-      visible.forEach((t, i) => {
-        const px = Math.max(0, x(t.t));
-        const py = y(t.price);
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      });
       const endX = x(now);
-      ctx.lineTo(endX, y(last.price));
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.strokeStyle = colors.line;
-      ctx.lineWidth = lineWidth;
-      ctx.stroke();
+      const tracePath = () => {
+        ctx.beginPath();
+        visible.forEach((t, i) => {
+          const px = Math.max(0, x(t.t));
+          const py = y(t.price);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.lineTo(endX, y(last.price));
+      };
 
-      // Soft area under the line
+      // Soft area under the line, fading down (drawn first so the line sits on top).
+      tracePath();
       ctx.lineTo(endX, bottom);
       ctx.lineTo(Math.max(0, x(visible[0].t)), bottom);
       ctx.closePath();
-      ctx.fillStyle = colors.area;
+      const area = ctx.createLinearGradient(0, top, 0, bottom);
+      area.addColorStop(0, rgba(lineRgb, 0.14));
+      area.addColorStop(1, rgba(lineRgb, 0));
+      ctx.fillStyle = area;
       ctx.fill();
+
+      tracePath();
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+
+      // Reveal: repaint the deciding 30 s in the outcome's colour, sweeping in
+      // from the close in step with the tinted band.
+      if (rv && rv.endMs && (rv.outcome === "up" || rv.outcome === "down")) {
+        const cx = x(rv.closeMs);
+        const ex = x(rv.endMs);
+        const p = rv.instant ? 1 : 1 - Math.pow(1 - Math.min(1, Math.max(0, (now - rv.at - 450) / 700)), 3);
+        if (ex > cx && p > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(cx, 0, (ex - cx) * p, height);
+          ctx.clip();
+          tracePath();
+          ctx.strokeStyle = rgba(rv.outcome === "up" ? colors.lineUp : colors.lineDown);
+          ctx.lineWidth = lineWidth + 1;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
 
       if (sched) {
         ctx.strokeStyle = colors.now;
@@ -366,11 +427,11 @@ export function LiveChart({
       const pulse = (now % 1600) / 1600;
       ctx.beginPath();
       ctx.arc(endX, ly, lineWidth + 2 + pulse * 12, 0, Math.PI * 2);
-      ctx.fillStyle = cssAlpha(colors.ring, 1 - pulse);
+      ctx.fillStyle = rgba(lineRgb, 0.18 * (1 - pulse));
       ctx.fill();
       ctx.beginPath();
       ctx.arc(endX, ly, lineWidth + 2, 0, Math.PI * 2);
-      ctx.fillStyle = colors.dot;
+      ctx.fillStyle = lineColor;
       ctx.fill();
     };
     raf = requestAnimationFrame(draw);
@@ -412,7 +473,3 @@ export function LiveChart({
   );
 }
 
-/** Scale the alpha of an rgba() string. */
-function cssAlpha(color: string, factor: number) {
-  return color.replace(/,\s*([\d.]+)\)$/, (_, a) => `, ${(parseFloat(a) * factor).toFixed(3)})`);
-}

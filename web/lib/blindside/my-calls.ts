@@ -41,5 +41,7 @@ export function subscribeCalls(l: () => void) {
   return () => listeners.delete(l);
 }
 
-export const getCalls = () => (typeof window === "undefined" ? EMPTY : read());
 const EMPTY: MyCall[] = [];
+export const getCalls = () => (typeof window === "undefined" ? EMPTY : read());
+/** Stable empty list for useSyncExternalStore's server snapshot. */
+export const getNoCalls = () => EMPTY;

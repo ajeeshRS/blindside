@@ -50,4 +50,6 @@ export function subscribeArchive(l: () => void) {
 }
 
 const EMPTY: RoundResult[] = [];
+/** Stable empty list for useSyncExternalStore's server snapshot. */
+export const getNoArchive = () => EMPTY;
 export const getArchiveList = () => (typeof window === "undefined" ? EMPTY : (load(), list));

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { ConnectButton } from "@/components/wallet/connect-button";
-import { getCalls, subscribeCalls, type MyCall } from "@/lib/blindside/my-calls";
+import { getCalls, getNoCalls, subscribeCalls } from "@/lib/blindside/my-calls";
 import { useSession } from "@/lib/blindside/session";
 import { TestWalletName } from "@/lib/blindside/test-wallet";
 import { ROUND, STAKES_USDC } from "@/lib/config";
@@ -35,7 +35,7 @@ export function CallPanel() {
   const availability = roundAvailability();
   const myKey = s.publicKey?.toBase58() ?? "";
 
-  const all = useSyncExternalStore(subscribeCalls, getCalls, () => [] as MyCall[]);
+  const all = useSyncExternalStore(subscribeCalls, getCalls, getNoCalls);
   const mine = useMemo(() => all.filter((c) => c.wallet === myKey), [all, myKey]);
   const thisRound = sched ? mine.find((c) => c.round === sched.round) : undefined;
   const last = mine[0];
@@ -74,14 +74,14 @@ export function CallPanel() {
     if (!s.publicKey) {
       return (
         <>
-          <p className="text-[18px] leading-[24px] font-[652] tracking-[-0.2px]">
+          <p className="text-[18px] leading-[24px] font-[700] tracking-[-0.03em]">
             Higher or lower in 30 seconds?
           </p>
           <p className="mt-6 text-[14px] leading-[20px] text-text-secondary">
             Play with free test USDC on Solana devnet.
           </p>
           <Button
-            className="mt-16 h-48 w-full rounded-12 text-[15px]"
+            className="mt-16 h-48 w-full text-[13px]"
             icon={<Zap className="size-16" />}
             onClick={() => select(TestWalletName)}
           >
@@ -106,7 +106,7 @@ export function CallPanel() {
       const resuming = s.player.kind === "base";
       return (
         <>
-          <p className="text-[18px] leading-[24px] font-[652] tracking-[-0.2px]">
+          <p className="text-[18px] leading-[24px] font-[700] tracking-[-0.03em]">
             {resuming ? "Back in the game?" : "Get 100 test USDC and start"}
           </p>
           <p className="mt-6 text-[14px] leading-[20px] text-text-secondary">
@@ -131,7 +131,7 @@ export function CallPanel() {
             </ol>
           )}
           <Button
-            className="mt-16 h-48 w-full rounded-12 text-[15px]"
+            className="mt-16 h-48 w-full text-[13px]"
             disabled={Boolean(s.busy)}
             onClick={() => act(s.start, "You're in. Make your first call.")}
           >
@@ -145,12 +145,12 @@ export function CallPanel() {
     if (!s.signedIn) {
       return (
         <>
-          <p className="text-[18px] leading-[24px] font-[652] tracking-[-0.2px]">Sign in to play</p>
+          <p className="text-[18px] leading-[24px] font-[700] tracking-[-0.03em]">Sign in to play</p>
           <p className="mt-6 text-[14px] leading-[20px] text-text-secondary">
             One signature lets this browser read your private balance and send calls.
           </p>
           <Button
-            className="mt-16 h-48 w-full rounded-12 text-[15px]"
+            className="mt-16 h-48 w-full text-[13px]"
             disabled={Boolean(s.busy)}
             onClick={() => act(s.signIn)}
           >
@@ -168,7 +168,7 @@ export function CallPanel() {
 
     return (
       <>
-        <p className="text-[18px] leading-[24px] font-[652] tracking-[-0.2px]">
+        <p className="text-[18px] leading-[24px] font-[700] tracking-[-0.03em]">
           Higher or lower in 30 seconds?
         </p>
 
@@ -181,10 +181,10 @@ export function CallPanel() {
                 onClick={() => setStake(v)}
                 aria-pressed={stake === v}
                 className={cn(
-                  "h-40 rounded-8 font-mono text-[15px] tabular transition-colors disabled:opacity-40",
+                  "h-40 rounded-10 font-mono text-[15px] tabular transition-colors disabled:opacity-40",
                   stake === v
-                    ? "bg-bg-brand text-text-on-color"
-                    : "text-text-primary shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))] hover:bg-bg-secondary",
+                    ? "bg-bg-inverse text-text-inverse"
+                    : "bg-bg-elevated text-text-primary shadow-tile hover:text-text-primary",
                 )}
               >
                 {v}
@@ -194,7 +194,7 @@ export function CallPanel() {
         </fieldset>
 
         {thisRound ? (
-          <div className="mt-12 rounded-10 border border-dashed border-border-secondary-hover p-12">
+          <div className="mt-12 rounded-8 border border-dashed border-border-secondary-hover p-12">
             <p className="text-label text-text-tertiary">Your call this round</p>
             <p className="mt-4 flex items-center gap-6 text-[16px] font-[600]">
               {thisRound.side === SIDE.up ? (
@@ -216,7 +216,7 @@ export function CallPanel() {
           <div className="mt-12 grid grid-cols-2 gap-8">
             <Button
               variant="up"
-              className="h-56 rounded-12 text-[16px] font-[600]"
+              className="h-56 text-[14px]"
               disabled={disabled}
               onClick={() => send(SIDE.up)}
               icon={<ArrowUp className="size-20" strokeWidth={2.6} />}
@@ -225,7 +225,7 @@ export function CallPanel() {
             </Button>
             <Button
               variant="down"
-              className="h-56 rounded-12 text-[16px] font-[600]"
+              className="h-56 text-[14px]"
               disabled={disabled}
               onClick={() => send(SIDE.down)}
               icon={<ArrowDown className="size-20" strokeWidth={2.6} />}
@@ -244,6 +244,16 @@ export function CallPanel() {
                 ? "Not enough balance for this stake."
                 : "Calls are final. A call that lands after the secret close is refunded."}
         </p>
+        {s.sessionUntil && (
+          <p
+            className="mt-6 flex items-center gap-6 text-[12.5px] leading-[18px] text-text-secondary"
+            title="Your wallet authorised a temporary key in this browser. It signs calls on MagicBlock's rollup, so there's no pop-up per call. It can't withdraw: only your wallet can."
+          >
+            <Zap className="size-13 shrink-0 text-accent" aria-hidden />
+            One-tap calls: a session key in this browser signs them until{" "}
+            {new Date(s.sessionUntil * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.
+          </p>
+        )}
 
         <button
           className="mt-10 text-[12px] text-text-tertiary underline-offset-4 hover:text-text-primary hover:underline disabled:opacity-40"

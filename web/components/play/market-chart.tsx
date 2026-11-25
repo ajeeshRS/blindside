@@ -5,7 +5,7 @@ import { BadgeCheck, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { LiveChart, type RevealMarks } from "@/components/market/live-chart";
-import { getCalls, subscribeCalls, type MyCall } from "@/lib/blindside/my-calls";
+import { getCalls, getNoCalls, subscribeCalls } from "@/lib/blindside/my-calls";
 import { payoutFor, useRoundResult, type RoundResult } from "@/lib/blindside/results";
 import { useSession } from "@/lib/blindside/session";
 import { ROUND } from "@/lib/config";
@@ -99,7 +99,7 @@ const fmtUsdc = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits
 
 function RevealLayer({ result, instant }: { result: RoundResult; instant: boolean }) {
   const { publicKey } = useSession();
-  const all = useSyncExternalStore(subscribeCalls, getCalls, () => [] as MyCall[]);
+  const all = useSyncExternalStore(subscribeCalls, getCalls, getNoCalls);
   const key = publicKey?.toBase58();
   const mine = all.find((c) => c.round === result.round && c.wallet === key);
   const onChain = mine ? result.calls.find((c) => c.player === key) : undefined;
@@ -110,6 +110,15 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
   const pct = move !== null && result.strike ? (move / result.strike) * 100 : null;
   const won = result.outcome === "up" ? "up" : result.outcome === "down" ? "down" : null;
   const oneSided = result.outcome === "void" && result.voidCode === 6;
+  // "REFUNDED" only means something to someone who called. Everyone else
+  // gets a quiet note on why the round didn't count.
+  const quiet = result.outcome === "void" && !mine;
+  const quietReason =
+    result.calls.length === 0
+      ? "Nobody called this round"
+      : oneSided
+        ? "Only one side was called, so everyone was refunded"
+        : result.voidReason || "The round didn't settle, so everyone was refunded";
 
   let personal: { text: string; tone: "up" | "down" | "neutral" } | null = null;
   if (mine) {
@@ -144,7 +153,7 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: delay(0.6), duration: 0.3 }}
-          className="absolute top-[var(--strike-y)] left-[var(--close-x)] -translate-x-[calc(100%+8px)] -translate-y-1/2 whitespace-nowrap rounded-4 bg-bg-primary/90 px-6 py-2 font-mono text-[11px] text-text-brand shadow-hairline"
+          className="absolute top-[var(--strike-y)] left-[max(4px,calc(var(--close-x)-120px))] w-[112px] -translate-y-1/2 text-center whitespace-nowrap rounded-4 bg-bg-primary/90 px-6 py-2 font-mono text-[11px] text-text-brand shadow-hairline"
         >
           START {fmtPrice(result.strike)}
         </motion.span>
@@ -157,7 +166,7 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
           animate={{ opacity: 1 }}
           transition={{ delay: delay(1.2), duration: 0.3 }}
           className={cn(
-            "absolute bottom-8 left-[var(--end-x)] -translate-x-1/2 whitespace-nowrap rounded-4 px-6 py-2 font-mono text-[11px] text-text-on-color",
+            "absolute bottom-8 left-[max(52px,var(--end-x))] -translate-x-1/2 whitespace-nowrap rounded-4 px-6 py-2 font-mono text-[11px] text-text-on-color",
             won === "up" ? "bg-bg-up" : won === "down" ? "bg-bg-down" : "bg-bg-inverse text-text-inverse",
           )}
         >
@@ -165,16 +174,27 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
         </motion.span>
       )}
 
-      {/* Outcome */}
+      {/* A voided round you weren't in: a quiet note, not a "REFUNDED" banner. */}
+      {quiet ? (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: delay(1.5), duration: 0.3 }}
+          className="absolute top-[34%] left-1/2 w-max max-w-[86%] -translate-x-1/2 rounded-10 bg-bg-elevated/90 px-14 py-8 text-center shadow-dropdown backdrop-blur-md"
+        >
+          <p className="text-[13px] leading-[18px] font-[600]">No contest</p>
+          <p className="text-[12px] leading-[17px] text-text-secondary">{quietReason}</p>
+        </motion.div>
+      ) : (
       <motion.div
         initial={{ opacity: 0, scale: 0.94, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ delay: delay(1.5), type: "spring", stiffness: 320, damping: 24 }}
-        className="absolute top-[34%] left-1/2 w-max max-w-[86%] -translate-x-1/2 rounded-12 bg-bg-primary/90 px-18 py-12 text-center shadow-dropdown backdrop-blur-md"
+        className="absolute top-[34%] left-1/2 w-max max-w-[86%] -translate-x-1/2 rounded-10 bg-bg-elevated/95 px-20 py-14 text-center shadow-dropdown backdrop-blur-md"
       >
         <p
           className={cn(
-            "font-mono text-[20px] leading-[26px] font-medium tracking-[0.02em] md:text-[24px] md:leading-[30px]",
+            "font-display text-[30px] leading-[32px] md:text-[38px] md:leading-[40px]",
             won === "up" ? "text-text-up" : won === "down" ? "text-text-down" : "text-text-primary",
           )}
         >
@@ -193,7 +213,7 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: delay(1.9), duration: 0.3 }}
             className={cn(
-              "mt-8 text-[15px] font-[652]",
+              "mt-8 text-[15px] font-[500]",
               personal.tone === "up" && "text-text-up",
               personal.tone === "down" && "text-text-down",
             )}
@@ -205,6 +225,7 @@ function RevealLayer({ result, instant }: { result: RoundResult; instant: boolea
           </motion.p>
         )}
       </motion.div>
+      )}
     </div>
   );
 }

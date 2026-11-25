@@ -25,7 +25,13 @@ export function createProgram(connection: Connection, wallet: AnchorWallet): Bli
   return new Program<Blindside>(idl, provider);
 }
 
-export const baseConnection = (rpc = BASE_RPC) => new Connection(rpc, "confirmed");
+/**
+ * Solana base-layer connection. `noRetry` turns off web3.js's automatic
+ * retries on HTTP 429, which multiply traffic up to 6x against a rate-limited
+ * public RPC; callers that poll anyway (the web app) should pass it.
+ */
+export const baseConnection = (rpc = BASE_RPC, opts: { noRetry?: boolean } = {}) =>
+  new Connection(rpc, { commitment: "confirmed", disableRetryOnRateLimit: opts.noRetry ?? false });
 
 /** Log in to the private rollup; the token is valid for ~30 days. */
 export async function teeLogin(signer: MessageSigner, rpc = TEE_RPC) {

@@ -50,7 +50,7 @@ export function Modal({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="relative w-full max-w-[420px] rounded-t-20 bg-bg-elevated p-20 pb-[max(20px,env(safe-area-inset-bottom))] shadow-float shadow-hairline sm:m-16 sm:rounded-20"
+            className="relative w-full max-w-[420px] rounded-t-28 bg-bg-elevated p-24 pb-[max(24px,env(safe-area-inset-bottom))] shadow-float shadow-hairline sm:m-16 sm:rounded-28"
             initial={{ y: 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 16, opacity: 0 }}
@@ -58,7 +58,7 @@ export function Modal({
           >
             <div className="mb-20 flex items-start justify-between gap-16">
               <div>
-                <h2 id={titleId} className="text-[20px] leading-[26px] font-[652] tracking-[-0.3px]">
+                <h2 id={titleId} className="text-[22px] leading-[28px] font-[700] tracking-[-0.035em]">
                   {title}
                 </h2>
                 {description && (
@@ -67,7 +67,7 @@ export function Modal({
               </div>
               <button
                 onClick={onClose}
-                className="-mr-4 -mt-2 flex size-32 shrink-0 items-center justify-center rounded-8 text-text-secondary shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))] transition-colors hover:bg-bg-secondary hover:text-text-primary"
+                className="-mr-4 -mt-2 flex size-36 shrink-0 items-center justify-center rounded-10 bg-bg-secondary text-text-secondary transition-colors hover:bg-bg-secondary-hover hover:text-text-primary"
                 aria-label="Close"
               >
                 <X className="size-16" />

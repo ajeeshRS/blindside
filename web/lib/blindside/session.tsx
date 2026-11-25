@@ -9,12 +9,18 @@ import {
   faucetIx,
   FAUCET_USDC,
   joinIx,
+  keypairSigner,
+  keypairWallet,
   leave,
+  leaveSession,
+  nowS,
   ONE_USDC,
   placeCall,
+  placeCallSession,
   playerPda,
   PROGRAM_ID,
   readPlayer,
+  setSessionIx,
   sleep,
   teeConnection,
   teeLogin,
@@ -22,8 +28,8 @@ import {
   withdrawRaw,
   type BlindsideProgram,
 } from "@blindside/client";
-import { useAnchorWallet, useWallet } from "@solana/wallet-adapter-react";
-import { Transaction, type PublicKey } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { Keypair, Transaction, type PublicKey } from "@solana/web3.js";
 import {
   createContext,
   useCallback,
@@ -36,7 +42,15 @@ import {
 } from "react";
 import { SOLANA_RPC_URL } from "@/lib/config";
 import { getArchived } from "./archive";
+import { useDevnetWallet } from "./devnet-wallet";
 import { getCalls, rememberCall } from "./my-calls";
+import {
+  loadSessionKey,
+  saveSessionKey,
+  saveSessionToken,
+  SESSION_TTL_S,
+} from "./session-key";
+import { TestWalletName } from "./test-wallet";
 import { fetchResult } from "./results";
 
 /** Where the player's balance is. */
@@ -59,6 +73,12 @@ type Session = {
   /** What's running right now, for buttons and progress. */
   busy: string | null;
   steps: { label: string; done: boolean }[];
+  /**
+   * Wallet extensions play through a session key: calls are one tap and the
+   * wallet never signs a rollup transaction. Unix seconds it's valid until,
+   * or null (built-in test wallet, or not authorised yet).
+   */
+  sessionUntil: number | null;
   signIn: () => Promise<void>;
   start: () => Promise<void>;
   call: (round: number, side: number, amountUsdc: number) => Promise<string>;
@@ -70,6 +90,8 @@ const SessionContext = createContext<Session | null>(null);
 
 const TOKEN_KEY = (pk: string) => `blindside:tee:${pk}`;
 const START_DEPOSIT = FAUCET_USDC;
+/** Marks an RPC read that failed, as opposed to one that found nothing. */
+const FAILED: unique symbol = Symbol("failed");
 
 function loadToken(pk: string) {
   try {
@@ -90,13 +112,17 @@ function saveToken(pk: string, token: string, expiresAt: number) {
 }
 
 export function BlindsideSession({ children }: { children: ReactNode }) {
-  const anchorWallet = useAnchorWallet();
-  const { signMessage } = useWallet();
+  // Signs with the network named, so real wallets on devnet don't report a mainnet mismatch.
+  const anchorWallet = useDevnetWallet();
+  const { signMessage, wallet } = useWallet();
+  // The built-in test wallet signs rollup transactions itself; extensions use a session key.
+  const usesSession = Boolean(wallet && wallet.adapter.name !== TestWalletName);
+  const [sessionUntil, setSessionUntil] = useState<number | null>(null);
   const publicKey = anchorWallet?.publicKey ?? null;
   const key = publicKey?.toBase58() ?? null;
 
   const base = useMemo<BlindsideProgram | null>(
-    () => (anchorWallet ? createProgram(baseConnection(SOLANA_RPC_URL), anchorWallet) : null),
+    () => (anchorWallet ? createProgram(baseConnection(SOLANA_RPC_URL, { noRetry: true }), anchorWallet) : null),
     [anchorWallet],
   );
   const [token, setToken] = useState<string | null>(null);
@@ -112,22 +138,30 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
   const [steps, setSteps] = useState<{ label: string; done: boolean }[]>([]);
   const busyRef = useRef(false);
 
-  // Restore a saved rollup login for this wallet.
+  // Restore a saved rollup login (and session key) for this wallet.
   useEffect(() => {
     setToken(key ? loadToken(key) : null);
+    setSessionUntil(key && usesSession ? (loadSessionKey(key)?.expiresAt ?? null) : null);
     setPlayer({ kind: "loading" });
-  }, [key]);
+  }, [key, usesSession]);
 
   const refresh = useCallback(async () => {
     if (!base || !publicKey) return;
     const conn = base.provider.connection;
+    // A failed read (devnet rate limits, a blip) is not "no account": keep what
+    // we know and try again on the next refresh instead of asking the player
+    // to set up again.
     const [info, lamports, ata] = await Promise.all([
-      conn.getAccountInfo(playerPda(publicKey)).catch(() => null),
-      conn.getBalance(publicKey).catch(() => null),
-      conn.getTokenAccountBalance(userAta(publicKey)).catch(() => null),
+      conn.getAccountInfo(playerPda(publicKey)).catch((): typeof FAILED => FAILED),
+      conn.getBalance(publicKey).catch((): typeof FAILED => FAILED),
+      // A missing token account is a real "0 USDC", so only RPC errors count as failures.
+      conn
+        .getTokenAccountBalance(userAta(publicKey))
+        .catch((e: Error) => (/could not find account|Invalid param/i.test(e.message) ? null : (FAILED as typeof FAILED))),
     ]);
-    setSol(lamports === null ? null : lamports / 1e9);
-    setWalletUsdc(ata ? Number(ata.value.amount) / ONE_USDC : 0);
+    if (lamports !== FAILED) setSol(lamports / 1e9);
+    if (ata !== FAILED) setWalletUsdc(ata ? Number(ata.value.amount) / ONE_USDC : 0);
+    if (info === FAILED) return;
     if (!info) return setPlayer({ kind: "none" });
     if (info.owner.equals(PROGRAM_ID)) {
       const p = base.coder.accounts.decode("player", info.data);
@@ -167,7 +201,10 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     if (!base) return;
-    const id = setInterval(() => void refresh(), 5000);
+    // Poll only while the tab is visible, to stay under devnet's rate limits.
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 5000);
     return () => clearInterval(id);
   }, [refresh, base]);
 
@@ -191,6 +228,38 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
       setToken(t);
     });
   }, [publicKey, signMessage, key, run]);
+
+  /**
+   * A rollup program signed by this browser's session key. If there's no valid
+   * key, the wallet authorises a new one in one normal devnet transaction.
+   */
+  const sessionProgram = useCallback(async (): Promise<BlindsideProgram> => {
+    if (!base || !anchorWallet || !publicKey || !key) throw new Error("Connect a wallet first.");
+    let sk = loadSessionKey(key);
+    if (!sk) {
+      const kp = Keypair.generate();
+      const expiresAt = nowS() + SESSION_TTL_S;
+      const conn = base.provider.connection;
+      const tx = new Transaction().add(await setSessionIx(base, kp.publicKey, expiresAt));
+      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+      tx.feePayer = publicKey;
+      tx.recentBlockhash = blockhash;
+      const signed = await anchorWallet.signTransaction(tx);
+      const sig = await conn.sendRawTransaction(signed.serialize());
+      const res = await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+      if (res.value.err) throw new Error("Couldn't authorise this browser. Try again.");
+      saveSessionKey(key, kp, expiresAt);
+      setSessionUntil(expiresAt);
+      sk = { keypair: kp, expiresAt, token: null };
+    }
+    let token = sk.token;
+    if (!token) {
+      const login = await teeLogin(keypairSigner(sk.keypair));
+      saveSessionToken(key, login.token, login.expiresAt);
+      token = login.token;
+    }
+    return createProgram(teeConnection(token), keypairWallet(sk.keypair));
+  }, [base, anchorWallet, publicKey, key]);
 
   /** Everything a new player needs, with as few approvals as possible. */
   const start = useCallback(async () => {
@@ -241,6 +310,13 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
       const second = new Transaction();
       if (deposit >= 1) second.add(await depositIx(base, deposit));
       second.add(await delegatePlayerIx(base));
+      // Wallet extensions: authorise a session key in the same approval, so
+      // calls are one tap and the wallet never signs a rollup transaction.
+      let newSession: { kp: Keypair; expiresAt: number } | null = null;
+      if (usesSession && key && !loadSessionKey(key)) {
+        newSession = { kp: Keypair.generate(), expiresAt: nowS() + SESSION_TTL_S };
+        second.add(await setSessionIx(base, newSession.kp.publicKey, newSession.expiresAt));
+      }
 
       const txs = [first, second].filter((t) => t.instructions.length > 0);
       const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
@@ -253,6 +329,10 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
         const sig = await conn.sendRawTransaction(t.serialize());
         const res = await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
         if (res.value.err) throw new Error(`Setup transaction failed: ${JSON.stringify(res.value.err)}`);
+      }
+      if (newSession && key) {
+        saveSessionKey(key, newSession.kp, newSession.expiresAt);
+        setSessionUntil(newSession.expiresAt);
       }
       mark(1);
       mark(2);
@@ -270,17 +350,21 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
       mark(4);
     });
     await refresh();
-  }, [base, anchorWallet, publicKey, signMessage, key, run, refresh]);
+  }, [base, anchorWallet, publicKey, signMessage, key, run, refresh, usesSession]);
 
   const call = useCallback(
     async (round: number, side: number, amountUsdc: number) => {
-      if (!tee) throw new Error("Sign in to the private rollup first.");
-      const sig = await run("Sending your call", () => placeCall(tee, round, side, amountUsdc));
+      if (!publicKey) throw new Error("Connect a wallet first.");
+      const sig = await run("Sending your call", async () => {
+        if (usesSession) return placeCallSession(await sessionProgram(), publicKey, round, side, amountUsdc);
+        if (!tee) throw new Error("Sign in to the private rollup first.");
+        return placeCall(tee, round, side, amountUsdc);
+      });
       rememberCall({ round, side, amount: amountUsdc, sig, at: Date.now(), wallet: key ?? "" });
       void refresh();
       return sig;
     },
-    [tee, run, refresh, key],
+    [tee, run, refresh, key, publicKey, usesSession, sessionProgram],
   );
 
   /** Bring the balance back to the base layer and withdraw it to the wallet. */
@@ -290,8 +374,11 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
       const conn = base.provider.connection;
       let info = await conn.getAccountInfo(playerPda(publicKey));
       if (info && !info.owner.equals(PROGRAM_ID)) {
-        if (!tee) throw new Error("Sign in to the private rollup first.");
-        await leave(tee);
+        if (usesSession) await leaveSession(await sessionProgram(), publicKey);
+        else {
+          if (!tee) throw new Error("Sign in to the private rollup first.");
+          await leave(tee);
+        }
         for (let i = 0; i < 40; i++) {
           info = await conn.getAccountInfo(playerPda(publicKey));
           if (info?.owner.equals(PROGRAM_ID)) break;
@@ -303,7 +390,7 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
       if (p.balance.gt(new BN(0))) await withdrawRaw(base, p.balance);
     });
     await refresh();
-  }, [base, publicKey, tee, run, refresh]);
+  }, [base, publicKey, tee, run, refresh, usesSession, sessionProgram]);
 
   const value = useMemo<Session>(
     () => ({
@@ -314,13 +401,14 @@ export function BlindsideSession({ children }: { children: ReactNode }) {
       sol,
       busy,
       steps,
+      sessionUntil,
       signIn,
       start,
       call,
       cashOut,
       refresh,
     }),
-    [publicKey, tee, player, walletUsdc, sol, busy, steps, signIn, start, call, cashOut, refresh],
+    [publicKey, tee, player, walletUsdc, sol, busy, steps, sessionUntil, signIn, start, call, cashOut, refresh],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

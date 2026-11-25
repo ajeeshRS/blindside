@@ -24,6 +24,14 @@ const SECTIONS = [
     body: "Nobody can see how much is on up or down while a round runs, so there's no last-second odds sniping. The split is shown when the round is revealed.",
   },
   {
+    title: "Winners split the losing side, with no house",
+    body: "Each winner gets their stake back plus a share of the losing side's stakes, in proportion to what they put in. There's no fee: everything staked is paid out, rounding down, so payouts can never exceed stakes. A round needs calls on both sides; otherwise everyone is refunded.",
+  },
+  {
+    title: "You can check the seal yourself",
+    body: "Try to peek on the Play page asks MagicBlock's private rollup for the running round, the way a bot would, and shows the real answer: nothing. After the reveal, Verify on the History page recomputes the close in your browser from the public data.",
+  },
+  {
     title: "The timing of the close can't leak",
     body: "The keeper sends a price tick every 0.4 seconds, the same way whatever the close time is, and every tick succeeds. Calls are accepted the same way all through the first 50 seconds. From outside, the moment the starting price is taken looks like every other tick.",
   },
@@ -43,6 +51,10 @@ const TRUST = [
     sees: "The random value it generates, but not our secret or players' values, so it can't work out the close either.",
   },
   {
+    who: "Your session key (wallet extensions)",
+    sees: "Nothing about the close. Your wallet authorises it once so calls are one tap; it can only place your calls and bring your balance back to your own account on Solana. It can't withdraw, and it expires after 3 days.",
+  },
+  {
     who: "Anyone with physical access to the enclave machines",
     sees: "Research such as TEE.fail (Oct 2025) shows Intel TDX memory can be read with physical access. Stakes are small and a hidden close is only worth one round.",
   },
@@ -58,6 +70,7 @@ const FALLBACKS = [
   "If MagicBlock VRF doesn't answer before 10 seconds, the close comes from our secret and players' values alone.",
   "If only one side has calls, or the price doesn't move, everyone is refunded.",
   "Payouts go to your game balance automatically after the reveal. Cash out moves it back to your wallet on Solana.",
+  "If MagicBlock's rollup drops the keeper's connection, the keeper waits, logs in again and carries on. Rounds it couldn't run are voided and refunded.",
   "If the keeper stops, rounds pause; any round in progress is voided and refunded. It can't move funds.",
 ];
 
@@ -79,7 +92,7 @@ export default function FairPage() {
             >
               <span className="mt-2 text-label text-text-tertiary">0{i + 1}</span>
               <div>
-                <h2 className="text-[17px] leading-[23px] font-[652]">{s.title}</h2>
+                <h2 className="text-[17px] leading-[23px] font-[700] tracking-[-0.03em]">{s.title}</h2>
                 <p className="mt-4 text-[15px] leading-[22px] text-text-secondary">{s.body}</p>
               </div>
             </li>

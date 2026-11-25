@@ -9,8 +9,8 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
 import { Surface } from "@/components/ui/surface";
-import { getArchiveList, getArchived, subscribeArchive } from "@/lib/blindside/archive";
-import { getCalls, subscribeCalls, type MyCall } from "@/lib/blindside/my-calls";
+import { getArchiveList, getNoArchive, getArchived, subscribeArchive } from "@/lib/blindside/archive";
+import { getCalls, getNoCalls, subscribeCalls, type MyCall } from "@/lib/blindside/my-calls";
 import { fetchRecentRounds, payoutFor, verifyClose, type RoundResult } from "@/lib/blindside/results";
 import { cn } from "@/lib/cn";
 import { useNow } from "@/lib/use-now";
@@ -64,8 +64,8 @@ export function HistoryView() {
 function MyCalls({ address, onVerify }: { address: string; onVerify: (r: RoundResult) => void }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
   const now = useNow();
-  const calls = useSyncExternalStore(subscribeCalls, getCalls, () => [] as MyCall[]);
-  useSyncExternalStore(subscribeArchive, getArchiveList, () => [] as RoundResult[]);
+  const calls = useSyncExternalStore(subscribeCalls, getCalls, getNoCalls);
+  useSyncExternalStore(subscribeArchive, getArchiveList, getNoArchive);
   const mine = useMemo(() => calls.filter((c) => c.wallet === address), [calls, address]);
   const rows = mine.map((c) => {
     const r = getArchived(c.round);
@@ -103,8 +103,8 @@ function MyCalls({ address, onVerify }: { address: string; onVerify: (r: RoundRe
               className={cn(
                 "h-32 rounded-8 px-12 font-mono text-[12px] transition-colors",
                 filter === f
-                  ? "bg-bg-brand text-text-on-color"
-                  : "text-text-secondary shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))] hover:bg-bg-secondary hover:text-text-primary",
+                  ? "bg-bg-inverse text-text-inverse"
+                  : "bg-bg-soft text-text-secondary hover:text-text-primary",
               )}
             >
               {f}
@@ -262,7 +262,13 @@ function RecentRounds({ onVerify }: { onVerify: (r: RoundResult) => void }) {
                     r.outcome === "up" ? "text-text-up" : r.outcome === "down" ? "text-text-down" : "text-text-tertiary",
                   )}
                 >
-                  {r.outcome === "up" ? "▲ Higher won" : r.outcome === "down" ? "▼ Lower won" : "Refunded"}
+                  {r.outcome === "up"
+                    ? "▲ Higher won"
+                    : r.outcome === "down"
+                      ? "▼ Lower won"
+                      : r.calls.length === 0
+                        ? "No calls"
+                        : "Refunded"}
                 </span>
                 <span className="flex items-center gap-4 font-mono text-[13px]">
                   {close(r.closeS)}

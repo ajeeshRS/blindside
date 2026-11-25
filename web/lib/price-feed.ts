@@ -230,3 +230,26 @@ export function changeOver(windowMs: number) {
     spanMs: last.t - first.t,
   };
 }
+
+/** The bet's horizon: momentum is measured over the same 30 seconds. */
+export const TREND_MS = 30_000;
+/** % move over TREND_MS needed to flip the trend (hysteresis, so colours don't flicker). */
+const TREND_FLIP_PCT = 0.003;
+/** Need at least this much history before calling a direction. */
+const TREND_MIN_SPAN_MS = 5_000;
+
+export type TrendDir = "up" | "down" | "flat";
+let trendDir: TrendDir = "flat";
+
+/**
+ * Price momentum over the last 30 s, shared by the chart line and the price
+ * header so they always agree. The direction only flips once the move passes
+ * the threshold the other way.
+ */
+export function trend(): { dir: TrendDir; pct: number | null; spanMs: number } {
+  const c = changeOver(TREND_MS);
+  if (!c || c.spanMs < TREND_MIN_SPAN_MS) return { dir: trendDir, pct: c?.pct ?? null, spanMs: c?.spanMs ?? 0 };
+  if (c.pct >= TREND_FLIP_PCT) trendDir = "up";
+  else if (c.pct <= -TREND_FLIP_PCT) trendDir = "down";
+  return { dir: trendDir, pct: c.pct, spanMs: c.spanMs };
+}

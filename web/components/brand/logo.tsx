@@ -96,7 +96,7 @@ export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-8", className)}>
       <LogoMark className="size-28" />
-      <span className="text-[16px] leading-[20px] font-[652] tracking-[-0.2px]">Blindside</span>
+      <span className="text-[16px] leading-[20px] font-[700] tracking-[-0.03em]">Blindside</span>
     </span>
   );
 }

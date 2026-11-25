@@ -74,38 +74,47 @@ function WalletModal({ open, onClose }: { open: boolean; onClose: () => void }) 
       {test && (
         <button
           onClick={() => choose(test.adapter.name)}
-          className="mb-12 flex h-60 w-full items-center gap-12 rounded-10 bg-bg-brand-soft px-14 text-left shadow-[inset_0_0_0_1px_hsl(var(--bg-brand)/40%)] transition-colors hover:bg-[hsl(var(--brand-50)/22%)]"
+          className="mb-10 flex w-full items-center gap-14 rounded-16 bg-bg-brand-soft p-14 text-left shadow-[inset_0_0_0_1px_hsl(var(--bg-brand)/35%)] transition-colors hover:bg-[hsl(var(--brand-50)/20%)]"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={test.adapter.icon} alt="" className="size-28 rounded-6" />
-          <span className="flex-1">
-            <span className="block text-[15px] font-[600]">Play instantly</span>
-            <span className="block text-[12px] text-text-secondary">
+          <img src={test.adapter.icon} alt="" className="size-36 shrink-0 rounded-10" />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-8">
+              <span className="text-[15px] leading-[20px] font-[600]">Play instantly</span>
+              <span className="rounded-6 bg-bg-brand px-6 py-1 text-[11px] leading-[16px] font-[600] text-text-on-color">
+                Recommended
+              </span>
+            </span>
+            <span className="mt-2 block text-[13px] leading-[18px] text-text-secondary">
               A devnet test wallet in this browser. No install, no pop-ups.
             </span>
           </span>
-          <span className="text-label text-text-brand">No install</span>
         </button>
       )}
       {detected.length > 0 ? (
         <ul className="flex flex-col gap-8">
+          <li className="px-4 pt-4 pb-2 text-[12.5px] leading-[18px] font-[600] text-text-tertiary">
+            Or use your own wallet (switch it to devnet)
+          </li>
           {detected.map((w) => (
             <li key={w.adapter.name}>
               <button
                 onClick={() => choose(w.adapter.name)}
-                className="flex h-56 w-full items-center gap-12 rounded-10 px-14 text-left shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))] transition-colors hover:bg-bg-secondary"
+                className="flex h-60 w-full items-center gap-14 rounded-16 bg-bg-secondary px-14 text-left transition-colors hover:bg-bg-secondary-hover"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={w.adapter.icon} alt="" className="size-28 rounded-6" />
-                <span className="flex-1 text-[15px] font-[600]">{w.adapter.name}</span>
-                <span className="text-label text-text-up">Detected</span>
+                <img src={w.adapter.icon} alt="" className="size-36 shrink-0 rounded-10" />
+                <span className="min-w-0 flex-1 truncate text-[15px] leading-[20px] font-[600]">
+                  {w.adapter.name}
+                </span>
+                <span className="text-[12.5px] leading-[18px] font-[500] text-text-tertiary">Installed</span>
               </button>
             </li>
           ))}
         </ul>
       ) : (
         <div>
-          <p className="mb-16 text-[14px] leading-[20px] text-text-secondary">
+          <p className="mb-14 text-[14px] leading-[20px] text-text-secondary">
             No Solana wallet found in this browser. Install one, then come back to this page.
           </p>
           <ul className="flex flex-col gap-8">
@@ -115,7 +124,7 @@ function WalletModal({ open, onClose }: { open: boolean; onClose: () => void }) 
                   href={w.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex h-52 items-center justify-between rounded-10 px-14 text-[15px] font-[600] shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))] transition-colors hover:bg-bg-secondary"
+                  className="flex h-52 items-center justify-between rounded-16 bg-bg-secondary px-16 text-[15px] leading-[20px] font-[600] transition-colors hover:bg-bg-secondary-hover"
                 >
                   Get {w.name}
                   <ExternalLink className="size-16 text-text-tertiary" />
@@ -168,7 +177,7 @@ function AccountMenu({ className }: { className?: string }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex h-36 items-center gap-8 rounded-10 pl-6 pr-12 font-mono text-[13px] shadow-[inset_0_0_0_1px_hsl(var(--border-secondary-hover))] transition-colors hover:bg-bg-secondary"
+        className="flex h-38 items-center gap-8 rounded-10 bg-bg-secondary pl-6 pr-12 font-mono text-[13px] font-[600] transition-colors hover:bg-bg-secondary-hover"
       >
         {wallet && (
           // eslint-disable-next-line @next/next/no-img-element

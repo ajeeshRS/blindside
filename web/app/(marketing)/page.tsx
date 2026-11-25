@@ -1,28 +1,45 @@
-import { ArrowRight, Check } from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, ArrowUpDown, BadgeCheck, Check, Eye, EyeOff, Zap } from "lucide-react";
 import type { ReactNode } from "react";
-import { ButtonLink } from "@/components/ui/button";
-import { RoundSlab } from "@/components/marketing/round-slab";
+import { LogoMark } from "@/components/brand/logo";
+import { NextRoundIn, PhaseTicker } from "@/components/marketing/phase-ticker";
 import { HiddenFigure, PickFigure, RevealFigure } from "@/components/marketing/step-figures";
+import { MarketChart } from "@/components/play/market-chart";
+import { PriceHead, RoundMeta, RoundTitle } from "@/components/play/round-clock";
+import { ButtonLink } from "@/components/ui/button";
+import { Kicker } from "@/components/ui/kicker";
 
 const STATS = [
-  { value: "90s", label: "Per round" },
-  { value: "10–50s", label: "Secret close" },
-  { value: "30s", label: "To settle" },
+  { value: "90s", label: "Per round", body: "A new round opens on the live SOL price every 90 seconds." },
+  { value: "10–50s", label: "Secret close", body: "Betting closes at a moment nobody can see until the reveal." },
+  { value: "30s", label: "To settle", body: "The result is the price 30 seconds after the close." },
+  { value: "80s", label: "Reveal", body: "The close, prices, pools and every call become public." },
+];
+
+const STACK = [
+  { name: "MagicBlock Private ER", href: "https://docs.magicblock.gg" },
+  {
+    name: "MagicBlock VRF",
+    href: "https://docs.magicblock.gg/pages/verifiable-randomness-functions-vrfs/introduction/technical-details",
+  },
+  { name: "Pyth Lazer", href: "https://docs.pyth.network/lazer" },
+  { name: "Solana", href: "https://solana.com" },
 ];
 
 const STEPS = [
   {
+    icon: ArrowUpDown,
     figure: <PickFigure />,
     title: "Pick up or down",
     body: "Will SOL be higher or lower in 30 seconds? Make your call on the live price.",
   },
   {
+    icon: EyeOff,
     figure: <HiddenFigure />,
     title: "Betting closes in secret",
     body: "Each round closes at a random moment between 10 and 50 seconds, kept hidden inside MagicBlock's private rollup. Calls that come in too late are refunded.",
   },
   {
+    icon: BadgeCheck,
     figure: <RevealFigure />,
     title: "Watch the reveal",
     body: "At 80 seconds, see when it closed, where SOL went 30 seconds later, and whether you won. Then verify the close yourself.",
@@ -30,15 +47,74 @@ const STEPS = [
 ];
 
 const FAIR = [
-  "Nobody knows when betting closes — not players, not bots, not us",
+  "Nobody knows when betting closes: not players, not bots, not us",
   "Calls placed after the close are refunded, never counted",
+  "Nobody can reveal early: the program rejects it before 80 s",
   "Every round can be verified in your browser after the reveal",
+];
+
+const RECIPE = [
+  {
+    title: "Seal a secret at the open",
+    body: "The keeper seeds each round inside MagicBlock's Private Ephemeral Rollup, a TEE.",
+  },
+  {
+    title: "Mix in every early player",
+    body: "Each call adds a random nonce from the player's device, so the keeper can't know the close either.",
+  },
+  {
+    title: "Mix in MagicBlock VRF",
+    body: "Requested from inside the rollup, so even a keeper whose friends call early can't work it out.",
+  },
+  {
+    title: "Nobody can read the round",
+    body: "A permission with no readers hides the account until the reveal. Try to peek on the Play page.",
+  },
+  {
+    title: "Reveal, and let anyone check",
+    body: "At 80 seconds everything goes public and the close recomputes in any browser.",
+  },
+];
+
+const EXTRAS = [
+  {
+    icon: Eye,
+    title: "Try to peek, live",
+    body: "One click sends the request a bot would make for the running round. MagicBlock's private rollup answers: nothing exists. The same request for the round that just ended comes back in full.",
+    cta: "Try it on a live round",
+    href: "/play#peek",
+  },
+  {
+    icon: Zap,
+    title: "One-tap calls, any wallet",
+    body: "Rollup transactions carry the rollup's blockhash, which wallet extensions refuse to sign. So your wallet approves a session key once on Solana, and that key signs your calls in the rollup. It can't withdraw.",
+    cta: "Play with your wallet",
+    href: "/play",
+  },
+];
+
+const FITS = [
+  "Prediction markets",
+  "Short-term options",
+  "Sealed-bid auctions",
+  "Fair token launches",
+  "Game loot drops",
+];
+
+const SOURCES = [
+  { who: "Our keeper", what: "A secret seed, sealed inside the private rollup when the round opens." },
+  { who: "Every early player", what: "A random nonce from your device, mixed in with each call." },
+  { who: "MagicBlock VRF", what: "Verifiable randomness, requested from inside the rollup." },
 ];
 
 const FAQ = [
   {
     q: "How do I win?",
-    a: "Call whether SOL will be higher or lower 30 seconds after the round's secret close. If you're right, you share the pot with everyone else who called it right.",
+    a: "Call whether SOL will be higher or lower 30 seconds after the round's secret close. If you're right, you get your stake back plus a share of everything staked on the other side.",
+  },
+  {
+    q: "How is the pot split?",
+    a: "Winners share the losing side's stakes in proportion to what they put in, and get their own stake back. Put in half of the winning side's money and you take half of the losing side's. There's no house and no fee: everything staked is paid out. The smaller side pays more, and both sides stay hidden until the reveal, so nobody can wait for better odds.",
   },
   {
     q: "Why does betting close at a secret time?",
@@ -54,254 +130,331 @@ const FAQ = [
   },
   {
     q: "What do I need to play?",
-    a: "Nothing to install. Press Play instantly for a devnet test wallet in your browser, with free devnet SOL and 100 test USDC. You can also use Phantom, Solflare or Backpack on devnet; they'll ask you to approve each call.",
+    a: "Nothing to install. Press Play instantly for a devnet test wallet in your browser, with free devnet SOL and 100 test USDC. You can also use Phantom, Solflare or Backpack on devnet: your wallet approves the setup once, then a session key in your browser signs your calls, so each call is one tap with no pop-up. The session key can't withdraw; only your wallet can.",
   },
   {
     q: "How is the close kept secret, and can I check it?",
-    a: "It's mixed from three things no single party holds: our secret, a random value from each early player, and MagicBlock VRF randomness. It's stored in MagicBlock's Private Ephemeral Rollup, a secure enclave nobody can read until the reveal. Afterwards everything is public, and the Verify button on the History page recomputes the close in your browser.",
+    a: "It's mixed from three things no single party holds: our secret, a random value from each early player, and MagicBlock VRF randomness. It's stored in MagicBlock's Private Ephemeral Rollup, a secure enclave nobody can read until the reveal. You can test that yourself: Try to peek on the Play page asks the rollup for the running round, like a bot would, and gets nothing back. Afterwards everything is public, and the Verify button on the History page recomputes the close in your browser.",
   },
 ];
 
-const muted = "text-[hsl(0_0%_64%)] in-data-[theme=dark]:text-[hsl(0_0%_42%)]";
-
-/** Mono kicker in a crop-mark frame, then a two-tone heading. */
+/** Kicker, heavy display heading, short grey body. Centred by default. */
 function SectionHead({
-  index,
   kicker,
   title,
-  rest,
-  center,
+  body,
+  align = "center",
 }: {
-  index: string;
   kicker: string;
   title: ReactNode;
-  rest?: ReactNode;
-  center?: boolean;
+  body?: ReactNode;
+  align?: "center" | "left";
 }) {
+  const center = align === "center";
   return (
-    <div className={center ? "flex flex-col items-center text-center" : undefined}>
-      <p className="frame inline-flex gap-8 px-12 py-6 text-label text-text-secondary">
-        <span className="text-text-tertiary">{index}</span>
-        {kicker}
-      </p>
-      <h2 className="mt-16 text-[30px] leading-[1.08] font-[652] tracking-[-0.8px] text-balance md:text-[38px] md:tracking-[-1.1px]">
-        {title}
-        {rest ? <span className={muted}> {rest}</span> : null}
-      </h2>
+    <div className={center ? "mx-auto flex max-w-[720px] flex-col items-center text-center" : "max-w-[640px]"}>
+      <Kicker>{kicker}</Kicker>
+      <h2 className="text-display mt-14 text-[2.6rem] md:text-[3.75rem] xl:text-[4.2rem]">{title}</h2>
+      {body && (
+        <p className="mt-18 max-w-[42rem] text-[16px] leading-[1.6] text-text-secondary md:text-[19px]">
+          {body}
+        </p>
+      )}
     </div>
   );
 }
 
+const section = "py-80 md:py-112";
+
 export default function LandingPage() {
   return (
     <>
-      {/* Hero: one screen tall. The slab takes whatever height is left. */}
-      <section className="overflow-x-clip">
-        <div className="container-page flex flex-col items-center pt-32 pb-20 text-center md:pt-40 lg:h-[calc(100svh-60px)] lg:min-h-[520px] short:pt-24 short:pb-16">
-          <p className="frame inline-flex items-center gap-8 px-14 py-6 text-label text-text-secondary">
-            <span className="relative flex size-6" aria-hidden>
-              <span className="live-ping absolute inset-0 rounded-full bg-bg-up" />
-              <span className="relative size-6 rounded-full bg-bg-up" />
-            </span>
-            Live SOL price<span className="max-sm:hidden"> · A new round every 90s</span>
-          </p>
-          <h1 className="mt-20 text-[38px] leading-[1.04] font-[652] tracking-[-1px] md:text-[48px] md:tracking-[-1.4px] xl:text-[58px] xl:tracking-[-1.8px] short:mt-16 short:text-[50px]!">
-            <span className="block">Predict SOL.</span>
-            <span className="block text-balance text-[hsl(0_0%_64%)] in-data-[theme=dark]:text-[hsl(0_0%_42%)]">
-              Beat the market, not the bots<span className="text-text-primary">.</span>
-            </span>
-          </h1>
-          <p className="mt-16 max-w-[540px] text-[16px] leading-[24px] text-text-secondary text-balance md:text-[17px] md:leading-[26px] short:mt-12">
-            Call whether SOL goes up or down in the next 30 seconds. Betting closes at a secret
-            moment, so nobody can wait for the last second.
-          </p>
-          <div className="mt-24 flex flex-wrap justify-center gap-8 short:mt-20">
-            <ButtonLink href="/play" className="h-44 px-18 text-[15px]">
-              Play now
-            </ButtonLink>
-            <ButtonLink href="#how-it-works" variant="secondary" className="h-44 px-18 text-[15px]">
-              How it works
-            </ButtonLink>
-          </div>
+      {/* Hero: one idea, one screen. Icon, headline, one line, one action. */}
+      <section className="container-page flex min-h-[calc(100svh-66px)] flex-col items-center justify-center py-[clamp(32px,7vh,88px)] text-center">
+        <LogoMark className="size-[clamp(56px,9vh,76px)] drop-shadow-[0_14px_24px_hsl(227_100%_45%/0.35)]" />
+        <h1 className="text-display mt-[clamp(20px,4vh,36px)] text-[clamp(3.1rem,min(8.6vw,10.5vh),7.2rem)]">
+          Predict SOL.
+          <br />
+          <span className="text-text-tertiary">Beat the bots.</span>
+        </h1>
+        <p className="mt-[clamp(16px,3vh,28px)] max-w-[560px] text-[17px] leading-[1.55] text-text-secondary text-pretty md:text-[21px]">
+          90-second up/down calls where betting closes at a secret moment, so nobody can wait for
+          the last second.
+        </p>
+        <ButtonLink
+          href="/play"
+          size="xl"
+          className="mt-[clamp(24px,4.5vh,40px)]"
+          icon={<ArrowRight className="size-18" />}
+        >
+          Play now
+        </ButtonLink>
+        <p className="mt-14 text-[13.5px] text-text-tertiary">
+          Free on Solana devnet<span className="max-sm:hidden"> · no install</span> ·{" "}
+          <span className="whitespace-nowrap">
+            next round in <NextRoundIn className="font-[600] text-text-secondary" />
+          </span>
+        </p>
+      </section>
 
-          {/* The round, on its own patch of blueprint paper. */}
-          <div className="relative mt-32 mb-12 h-[200px] w-full sm:h-[340px] lg:mt-40 lg:h-auto lg:min-h-[150px] lg:flex-1 short:mt-32">
-            <div
-              aria-hidden
-              className="bg-blueprint absolute inset-0 [mask-image:radial-gradient(closest-side,black_40%,transparent)]"
-            />
-            <RoundSlab className="absolute inset-0" />
+      {/* The product, live: a dark window on a soft tray, just below the fold. */}
+      <section className="container-page">
+        <div className="rounded-[30px] bg-bg-soft p-10 md:p-16">
+          <div className="dark overflow-hidden rounded-[22px] shadow-[0_30px_60px_-30px_rgb(0_0_0/0.5)]">
+            <div className="flex h-40 items-center gap-8 bg-[hsl(240_8%_10%)] px-16">
+              <span className="flex gap-6" aria-hidden>
+                <span className="size-10 rounded-full bg-[#ff5f57]" />
+                <span className="size-10 rounded-full bg-[#febc2e]" />
+                <span className="size-10 rounded-full bg-[#28c840]" />
+              </span>
+              <RoundTitle className="flex-1 text-center font-code text-[12.5px] text-text-tertiary" />
+              <span className="w-[42px]" aria-hidden />
+            </div>
+            <div className="flex items-start justify-between gap-16 px-16 pt-16 md:px-28 md:pt-24">
+              <PriceHead />
+              <RoundMeta />
+            </div>
+            <div className="relative mt-12 h-[260px] md:h-[380px] lg:h-[440px]">
+              <div aria-hidden className="bg-blueprint absolute inset-0 opacity-60" />
+              <MarketChart className="absolute inset-0" />
+            </div>
+            <PhaseTicker className="border-t border-line px-16 py-14 md:px-28" />
           </div>
-
-          <dl className="grid w-full max-w-[640px] grid-cols-3 gap-8 md:gap-14">
-            {STATS.map((s) => (
-              <div key={s.label} className="frame flex flex-col items-center gap-2 px-8 py-10">
-                <dt className="order-2 text-label text-text-tertiary max-md:text-[11px]">
-                  {s.label}
-                </dt>
-                <dd className="font-mono text-[18px] font-medium tabular tracking-[-0.02em] md:text-[19px]">
-                  {s.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
         </div>
+        <ul className="mt-24 flex flex-wrap items-center justify-center gap-8 text-[14px]">
+          <li className="mr-4 text-text-tertiary">Built on</li>
+          {STACK.map((x) => (
+            <li key={x.name}>
+              <a
+                href={x.href}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-36 items-center rounded-10 bg-bg-soft px-14 font-[600] tracking-[-0.01em] transition-colors hover:bg-bg-secondary-hover"
+              >
+                {x.name}
+              </a>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* How it works */}
-      <section id="how-it-works" className="scroll-mt-60 border-t border-border-secondary">
-        <div className="container-page py-64 md:py-88">
-          <SectionHead
-            index="01"
-            kicker="How it works"
-            title="Three steps."
-            rest="One round every 90 seconds."
-            center
-          />
-          <ol className="mt-40 grid gap-12 md:grid-cols-3 md:gap-16">
-            {STEPS.map((step, i) => (
-              <li key={step.title} className="frame flex flex-col border-x border-border-secondary">
-                <div className="relative flex h-[148px] items-center justify-center border-b border-dashed border-border-secondary-hover px-24">
-                  <div
-                    aria-hidden
-                    className="bg-blueprint absolute inset-0 [mask-image:radial-gradient(closest-side,black_30%,transparent)]"
-                  />
-                  <div className="relative flex w-full justify-center" aria-hidden>
-                    {step.figure}
-                  </div>
-                </div>
-                <div className="flex flex-1 flex-col p-20 md:p-24">
-                  <span className="text-label text-text-tertiary">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <h3 className="mt-8 text-[18px] leading-[24px] font-[652] tracking-[-0.2px]">
-                    {step.title}
-                  </h3>
-                  <p className="mt-6 text-[15px] leading-[22px] text-text-secondary">{step.body}</p>
+      <section id="how-it-works" className={`container-page scroll-mt-80 ${section}`}>
+        <SectionHead
+          kicker="How it works"
+          title="Call it. Then it closes in secret."
+          body="One round every 90 seconds, on the live SOL price. Three steps, about a minute and a half."
+        />
+        <ol className="mt-56 grid gap-16 md:grid-cols-2 lg:grid-cols-3">
+          {STEPS.map(({ icon: Icon, ...step }) => (
+            <li key={step.title} className="flex flex-col rounded-28 bg-bg-soft p-28">
+              <span className="tile flex size-44 items-center justify-center rounded-12 text-accent">
+                <Icon className="size-20" aria-hidden />
+              </span>
+              <h3 className="mt-20 text-[21px] leading-[1.2] font-[700] tracking-[-0.035em]">
+                {step.title}
+              </h3>
+              <p className="mt-8 text-[15.5px] leading-[1.6] text-text-secondary">{step.body}</p>
+              <div className="tile mt-auto flex h-[132px] items-center justify-center px-20 pt-0" aria-hidden>
+                <div className="flex w-full justify-center">{step.figure}</div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* The round, in numbers */}
+      <section className={`container-page ${section} pt-0 md:pt-0`}>
+        <dl className="grid grid-cols-2 gap-16 lg:grid-cols-4">
+          {STATS.map((x) => (
+            <div key={x.label} className="flex flex-col rounded-28 bg-bg-soft p-24 md:p-28">
+              <dt className="order-2 mt-14 text-[15px] font-[700] tracking-[-0.02em]">{x.label}</dt>
+              <dd className="order-1 font-display text-[52px] leading-none md:text-[68px]">{x.value}</dd>
+              <dd className="order-3 mt-6 text-[14px] leading-[1.55] text-text-secondary">{x.body}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {/* Why it's fair: one dark spotlight card. */}
+      <section className={`container-page ${section} pt-0 md:pt-0`}>
+        <SectionHead
+          kicker="Why it's fair"
+          title="Speed stops being an edge."
+          body="When betting closes at a known time, whoever sees the price first bets in the last second. Blindside hides the close inside MagicBlock's Private Ephemeral Rollup."
+        />
+        <div className="dark relative mt-56 rounded-32 px-28 py-36 md:px-48 md:py-48">
+          <span className="absolute top-24 right-24 rounded-8 bg-bg-brand px-10 py-4 text-[12px] font-[600] text-white md:top-32 md:right-32">
+            Blockworks Intel · May 2026
+          </span>
+          <div className="grid gap-16 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-end lg:gap-40">
+            <p className="pt-24 font-display text-[76px] leading-none md:pt-0 md:text-[120px]">$11.4M</p>
+            <p className="max-w-[460px] text-[16px] leading-[1.6] text-text-secondary lg:pb-12">
+              made by 19 high-volume addresses in Polymarket&apos;s 15-minute crypto markets. Every
+              one was profitable, while the average active trader lost money.
+            </p>
+          </div>
+          <ul className="mt-36 grid gap-x-32 gap-y-16 border-t border-line pt-28 sm:grid-cols-2">
+            {FAIR.map((f) => (
+              <li key={f} className="flex gap-10 text-[15.5px] leading-[1.5]">
+                <Check className="mt-2 size-18 shrink-0 text-accent" aria-hidden />
+                {f}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-36 flex flex-wrap items-center gap-16">
+            <ButtonLink href="/fair" size="md" icon={<ArrowRight className="size-16" />}>
+              How it&apos;s kept fair
+            </ButtonLink>
+            <span className="text-[14px] text-text-tertiary">
+              Every guarantee, and the code that enforces it.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Highlight band: the one accent band on the page. */}
+      <section className="bg-bg-brand text-white">
+        <div className={`container-page ${section}`}>
+          <p className="text-kicker text-white/75">A note from the builders</p>
+          <blockquote className="text-display mt-16 max-w-[900px] text-[2.4rem] md:text-[3.75rem]">
+            &ldquo;We didn&apos;t want a faster market. We wanted one where being faster doesn&apos;t
+            matter.&rdquo;
+          </blockquote>
+          <p className="mt-20 max-w-[560px] text-[17px] leading-[1.6] text-white/80">
+            So nobody holds the whole secret. The close is mixed from three sources, sealed until
+            the reveal, and anyone can recompute it afterwards.
+          </p>
+          <ul className="mt-48 grid gap-16 md:grid-cols-3">
+            {SOURCES.map((x, i) => (
+              <li key={x.who} className="rounded-28 bg-white/12 p-28">
+                <span className="font-display text-[34px] leading-none text-white/60">0{i + 1}</span>
+                <h3 className="mt-16 text-[21px] font-[700] tracking-[-0.035em]">{x.who}</h3>
+                <p className="mt-6 text-[15.5px] leading-[1.6] text-white/80">{x.what}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* The pitch: the sealed close is a building block, the game is its first app. */}
+      <section className={`container-page ${section}`}>
+        <SectionHead
+          kicker="Under the hood"
+          title="A sealed close, for any fast market."
+          body="Blindside is the first app built on it. Anywhere bots win by acting last, the same pattern takes the last second away."
+        />
+        <div className="mt-56 grid gap-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <ol className="flex flex-col gap-10">
+            {RECIPE.map((x, i) => (
+              <li key={x.title} className="flex gap-16 rounded-20 bg-bg-soft p-20">
+                <span className="font-display text-[30px] leading-none text-text-tertiary">{i + 1}</span>
+                <div>
+                  <h3 className="text-[17px] leading-[1.3] font-[700] tracking-[-0.03em]">{x.title}</h3>
+                  <p className="mt-4 text-[14.5px] leading-[1.55] text-text-secondary">{x.body}</p>
                 </div>
               </li>
             ))}
           </ol>
-        </div>
-      </section>
-
-      {/* Why it's fair */}
-      <section className="border-t border-border-secondary">
-        <div className="container-page grid gap-40 py-64 md:py-88 lg:grid-cols-2 lg:gap-64">
-          <div className="flex flex-col">
-            <SectionHead
-              index="02"
-              kicker="Why it's fair"
-              title="Fast markets are usually won by bots."
-              rest="This one isn't."
-            />
-            <p className="mt-16 max-w-[480px] text-[16px] leading-[24px] text-text-secondary">
-              When betting closes at a known time, whoever sees the price first can bet in the
-              last second. Blindside hides the close inside MagicBlock&apos;s Private Ephemeral
-              Rollup, so speed stops being an edge.
-            </p>
-            <Link
-              href="/fair"
-              className="group mt-20 inline-flex items-center gap-6 self-start text-[15px] font-[600] text-text-brand"
-            >
-              Read how it&apos;s kept fair
-              <ArrowRight
-                className="size-16 transition-transform group-hover:translate-x-2"
-                aria-hidden
-              />
-            </Link>
-          </div>
-
-          <div className="flex flex-col gap-12">
-            <figure className="frame border-x border-border-secondary px-20 py-20 md:px-24">
-              <div className="font-mono text-[36px] leading-none font-medium tracking-[-0.03em] md:text-[44px]">
-                $11.4M
-              </div>
-              <figcaption className="mt-12 text-[15px] leading-[22px] text-text-secondary">
-                made by 19 high-volume addresses in Polymarket&apos;s 15-minute crypto markets.
-                Every one was profitable, while the average active trader lost money.
-                <span className="mt-10 block text-label text-text-tertiary">
-                  Blockworks Intel · May 2026
+          <div className="flex flex-col gap-16">
+            <div className="dark flex flex-1 flex-col overflow-hidden rounded-28">
+              <div className="flex h-40 items-center gap-8 bg-[hsl(240_8%_10%)] px-16">
+                <span className="flex gap-6" aria-hidden>
+                  <span className="size-10 rounded-full bg-[#ff5f57]" />
+                  <span className="size-10 rounded-full bg-[#febc2e]" />
+                  <span className="size-10 rounded-full bg-[#28c840]" />
                 </span>
-              </figcaption>
-            </figure>
-            <ul className="flex flex-col">
-              {FAIR.map((f, i) => (
-                <li
-                  key={f}
-                  className="flex items-start gap-12 border-b border-border-secondary py-14 text-[15px] leading-[22px] font-[600] last:border-b-0"
-                >
-                  <span className="mt-2 text-label text-text-tertiary">0{i + 1}</span>
-                  <span className="flex-1">{f}</span>
-                  <Check className="mt-2 size-18 shrink-0 text-text-up" aria-hidden />
-                </li>
-              ))}
-            </ul>
+                <span className="flex-1 text-center font-code text-[12.5px] text-text-tertiary">
+                  packages/client/src/verify.ts
+                </span>
+                <span className="w-[42px]" aria-hidden />
+              </div>
+              <pre className="flex-1 overflow-x-auto p-20 font-code text-[13px] leading-[1.7] text-text-secondary md:p-24 md:text-[14px]">
+                <span className="text-accent">import</span>
+                {" { recomputeOffset } "}
+                <span className="text-accent">from</span>
+                {' "@blindside/client";\n\n'}
+                <span className="text-text-tertiary">{"// After the reveal, all of this is public.\n"}</span>
+                <span className="text-accent">const</span>
+                {" close = recomputeOffset(\n  secret,      "}
+                <span className="text-text-tertiary">{"// sealed by the keeper at the open\n"}</span>
+                {"  earlyCalls,  "}
+                <span className="text-text-tertiary">{"// each player's nonce\n"}</span>
+                {"  vrf,         "}
+                <span className="text-text-tertiary">{"// MagicBlock VRF\n"}</span>
+                {");\n\n"}
+                <span className="text-text-primary">{"close === round.offsetS; "}</span>
+                <span className="text-text-tertiary">{"// true, so nobody chose it"}</span>
+              </pre>
+            </div>
+            <div className="rounded-20 bg-bg-soft p-20">
+              <p className="text-label text-text-secondary">The same pattern fits</p>
+              <ul className="mt-10 flex flex-wrap gap-8">
+                {FITS.map((f) => (
+                  <li key={f} className="tile rounded-8 px-10 py-6 text-[13.5px] font-[600]">
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
+        </div>
+        <div className="mt-16 grid gap-16 md:grid-cols-2">
+          {EXTRAS.map(({ icon: Icon, ...x }) => (
+            <a
+              key={x.title}
+              href={x.href}
+              className="group flex flex-col rounded-28 bg-bg-soft p-28 transition-colors hover:bg-bg-secondary-hover"
+            >
+              <span className="tile flex size-44 items-center justify-center rounded-12 text-accent">
+                <Icon className="size-20" aria-hidden />
+              </span>
+              <h3 className="mt-20 text-[21px] leading-[1.2] font-[700] tracking-[-0.035em]">{x.title}</h3>
+              <p className="mt-8 text-[15.5px] leading-[1.6] text-text-secondary">{x.body}</p>
+              <span className="mt-16 inline-flex items-center gap-6 text-[14.5px] font-[600]">
+                {x.cta}
+                <ArrowRight className="size-15 transition-transform group-hover:translate-x-2" aria-hidden />
+              </span>
+            </a>
+          ))}
         </div>
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="scroll-mt-60 border-t border-border-secondary">
-        <div className="container-page grid gap-32 py-64 md:py-88 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:gap-64">
-          <div className="lg:sticky lg:top-100 lg:self-start">
-            <SectionHead index="03" kicker="FAQ" title="Questions," rest="answered." />
-          </div>
-          <div className="border-t border-border-secondary">
-            {FAQ.map((f, i) => (
-              <details key={f.q} className="group border-b border-border-secondary">
-                <summary className="flex cursor-pointer list-none items-center gap-14 py-18 [&::-webkit-details-marker]:hidden">
-                  <span className="text-label text-text-tertiary">0{i + 1}</span>
-                  <span className="flex-1 text-[16px] leading-[22px] font-[600] md:text-[17px]">
-                    {f.q}
-                  </span>
-                  <span
-                    aria-hidden
-                    className="flex size-28 shrink-0 items-center justify-center rounded-8 border border-border-secondary-hover font-mono text-[16px] leading-none text-text-secondary transition-transform duration-200 group-open:rotate-45"
-                  >
-                    +
-                  </span>
-                </summary>
-                <p className="pb-20 pl-[34px] pr-40 text-[15px] leading-[23px] text-text-secondary">
-                  {f.a}
-                </p>
-              </details>
-            ))}
-          </div>
+      <section id="faq" className={`container-page scroll-mt-80 ${section}`}>
+        <SectionHead kicker="FAQ" title="Questions, answered." />
+        <div className="mx-auto mt-56 flex max-w-[760px] flex-col gap-10">
+          {FAQ.map((f) => (
+            <details key={f.q} className="group rounded-20 bg-bg-soft px-20 md:px-24">
+              <summary className="flex cursor-pointer list-none items-center gap-14 py-18 [&::-webkit-details-marker]:hidden">
+                <span className="flex-1 text-[17px] leading-[1.4] font-[600] tracking-[-0.02em]">
+                  {f.q}
+                </span>
+                <span
+                  aria-hidden
+                  className="tile flex size-32 shrink-0 items-center justify-center rounded-10 text-[18px] leading-none transition-transform duration-200 group-open:rotate-45"
+                >
+                  +
+                </span>
+              </summary>
+              <p className="pb-22 pr-40 text-[15.5px] leading-[1.6] text-text-secondary">{f.a}</p>
+            </details>
+          ))}
         </div>
       </section>
 
-      {/* Closing: a dark card lit from below by a blue glow. */}
-      <section className="container-page pb-64 md:pb-96">
-        <div className="dark relative overflow-hidden rounded-24 bg-[hsl(0_0%_3%)]! shadow-[inset_0_0_0_1px_hsl(0_0%_100%/8%)]">
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(ellipse_52%_100%_at_56%_118%,hsl(225_100%_52%)_0%,hsl(225_96%_46%/0.9)_28%,hsl(226_92%_40%/0.45)_52%,hsl(228_90%_30%/0.12)_68%,transparent_80%)]"
-          />
-          <div className="relative grid gap-32 px-24 py-56 md:px-48 md:py-72 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-center lg:gap-48 lg:px-64 lg:py-88">
-            <h2 className="text-[40px] leading-[0.98] font-[700] tracking-[-1.6px] text-balance md:text-[56px] md:tracking-[-2.4px] xl:text-[68px] xl:tracking-[-3px]">
-              Ready for the next round?
-            </h2>
-            <div>
-              <p className="max-w-[420px] text-[16px] leading-[26px] text-text-secondary md:text-[17px] md:leading-[28px]">
-                A new one starts every 90 seconds. Make your call, and see the secret close
-                revealed. Free to try on Solana devnet.
-              </p>
-              <div className="mt-24 flex flex-wrap gap-10">
-                <ButtonLink href="/play" className="h-44 px-18 text-[15px]">
-                  Play now
-                  <ArrowRight className="size-16" aria-hidden />
-                </ButtonLink>
-                <ButtonLink href="/fair" variant="secondary" className="h-44 px-18 text-[15px]">
-                  How it&apos;s kept fair
-                </ButtonLink>
-              </div>
-              <p className="mt-28 text-label text-text-tertiary">
-                MagicBlock Private Ephemeral Rollup + VRF · Prices from Pyth · Solana devnet
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* Final call to action */}
+      <section className="container-page pt-24 pb-96 text-center md:pb-128">
+        <h2 className="text-display mx-auto max-w-[820px] text-[2.8rem] md:text-[4.6rem]">
+          Ready for the next round?
+        </h2>
+        <p className="mx-auto mt-18 max-w-[480px] text-[17px] leading-[1.6] text-text-secondary md:text-[19px]">
+          It opens in <NextRoundIn className="font-[600] text-text-primary" />. Make your call and
+          watch the secret close revealed.
+        </p>
+        <ButtonLink href="/play" size="xl" className="mt-32" icon={<ArrowRight className="size-18" />}>
+          Play now
+        </ButtonLink>
       </section>
     </>
   );

@@ -25,7 +25,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <MotionConfig reducedMotion={motion === "reduced" ? "always" : "user"}>
-    <ConnectionProvider endpoint={SOLANA_RPC_URL} config={{ commitment: "confirmed" }}>
+    <ConnectionProvider endpoint={SOLANA_RPC_URL} config={{ commitment: "confirmed", disableRetryOnRateLimit: true }}>
       {/* Wallet Standard wallets (Phantom, Solflare, Backpack, Seeker) register themselves. */}
       <WalletProvider wallets={wallets} autoConnect onError={onWalletError}>
         <BlindsideSession>{children}</BlindsideSession>
