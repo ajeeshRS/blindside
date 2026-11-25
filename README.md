@@ -8,11 +8,24 @@ Blindside is a 90-second SOL up/down game where betting closes at a **secret mom
 
 Built for MagicBlock Solana Blitz v10, *Entertainment Finance*.
 
+## A sealed close, for any fast market
+
+The game is the first app built on a pattern any fast market can use: **close at a moment nobody can know, then let anyone check it.**
+
+1. **Seal** a secret inside MagicBlock's Private Ephemeral Rollup when the round opens.
+2. **Mix in** a random nonce from every early player, so the operator can't know the close.
+3. **Mix in** MagicBlock VRF, requested from inside the rollup.
+4. **Hide** the round with a permission that has no readers until the reveal.
+5. **Reveal** everything and let anyone recompute the close (`recomputeOffset` in [`packages/client`](packages/client/src/verify.ts)).
+
+The same pattern fits prediction markets, short-term options, sealed-bid auctions and fair launches: anywhere bots win by acting last.
+
 ## Try it in 30 seconds
 
-1. Open **[/play](https://blindside-beta.vercel.app/play)** and press **Play instantly**. It makes a devnet test wallet in your browser: no install, no pop-ups. (Phantom, Solflare and Backpack work too.)
+1. Open **[/play](https://blindside-beta.vercel.app/play)** and press **Play instantly**. It makes a devnet test wallet in your browser: no install, no pop-ups. (Phantom, Solflare and Backpack work too: your wallet approves the setup once, then a session key in the browser signs your calls, so there's no pop-up per call.)
 2. Press **Start playing**. One step gets you devnet SOL for fees, 100 test USDC, a game balance and a sign-in to the private rollup.
 3. Call **Higher** or **Lower** in the first seconds of a round, then watch the reveal at 80 s: where the secret close landed, the starting price, the 30 seconds that decided it, and what you won.
+4. Press **Try to peek** under the chart. Your browser makes the request a bot would make for the running round, and MagicBlock's private rollup answers `value: null`: the account doesn't exist to outsiders. The round before it, already revealed, comes back with the close, the secret, every call and the VRF value.
 
 Rounds are peer-to-peer: winners are paid from the other side's stakes. Playing alone, you'll be refunded. To see a win or a loss, open a second browser (or a private window) and take the other side in the same round.
 
@@ -48,6 +61,7 @@ Everything: the live Pyth Lazer SOL/USD feed on MagicBlock, real devnet transact
 - **Permission program:** no readers while a round runs, public at the reveal, owner-only for balances.
 - **Pyth Lazer price feed** on MagicBlock's rollup, read on-chain every tick.
 - **Delegation and commit/undelegate** for moving balances between Solana and the rollup.
+- **Session keys for the rollup.** Wallet extensions can't place a rollup transaction: it carries the rollup's blockhash, so Solflare, for one, refuses it as a mainnet "network mismatch" even on devnet. So the wallet authorises a temporary key once, in an ordinary devnet transaction (`set_session`, stored on Solana and read by the TEE), and that key signs calls and leaving (`place_call_session`, `leave_session`). Calls become one tap with no pop-up. The key can't withdraw: funds only leave through the wallet.
 - **MagicBlock VRF**, requested from inside the private rollup at each round's open and answered in about 2 s. Getting it to work taught us something worth sharing: in SDK 0.18 the `#[vrf_callback]` macro derives the VRF signer's address at runtime with software curve maths, which costs ~270k of the oracle's 300k compute budget, so callbacks fail and requests look unanswered. Declaring `vrf_program_identity` yourself with a compile-time address fixes it ([`programs/vrf_probe`](program/programs/vrf_probe/src/lib.rs) reproduces both).
 
 ## Repository
@@ -57,19 +71,19 @@ program/          Anchor program (Rust) + devnet end-to-end test
 packages/client/  shared TypeScript client: addresses, round clock, instructions, close verification
 keeper/           runs the round clock (hosted on Railway); one-time devnet setup
 web/              Next.js app (hosted on Vercel)
-docs/             architecture and UI/UX spec
+docs/             architecture and submission notes
 ```
 
 ## Tests
 
-- **29 Rust unit tests** for the round rules: close range and verification (with and without VRF), late or duplicate VRF, late calls, timing-leak resistance, early reveal, payouts, voids, double claims. `pnpm test:unit`
-- **Devnet end-to-end test, 10/10:** one real round on the private rollup with two players. Checks nobody (outsider, admin, player) can read the running round, transactions are hidden, a player and the admin can't open rounds, early reveal fails, the close recomputes from public data, payouts conserve funds, and withdrawal works. `pnpm test:devnet`
+- **31 Rust unit tests** for the round rules: close range and verification (with and without VRF), late or duplicate VRF, late calls, timing-leak resistance, early reveal, payouts, voids, double claims, session-key expiry. `pnpm test:unit`
+- **Devnet end-to-end test, 11/11:** one real round on the private rollup with two players, one of them playing through a session key. Checks nobody (outsider, admin, player) can read the running round, transactions are hidden, a player and the admin can't open rounds, a stranger's key can't call or leave for a player, early reveal fails, the close recomputes from public data, payouts conserve funds, and withdrawal works. `pnpm test:devnet`
 
 ## Run it yourself
 
 ```bash
 pnpm install
-pnpm test:unit          # 29 Rust tests (no network)
+pnpm test:unit          # 31 Rust tests (no network)
 pnpm typecheck
 pnpm dev                # web app on http://localhost:3000 (gas drip needs SPONSOR_SECRET_KEY)
 

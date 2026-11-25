@@ -17,6 +17,7 @@ Every 90 s (wall clock, `round = floor(unix / 90)`):
 ## Where things live
 
 - **Base layer:** `Config`, the test-USDC mint and vault, `faucet`, `join`, `deposit`, `withdraw`.
+- **Base layer, read by the rollup:** each player's `Session` (`set_session`): a temporary key their wallet authorised, with an expiry of at most 7 days.
 - **Private rollup (TEE):** 8 reusable round `Slot`s (`round % 8`) whose permission has **no readers** until the reveal, and each `Player` balance, readable only by that player.
 - **Rules:** plain functions in `programs/blindside/src/logic.rs`, unit-tested there.
 
