@@ -35,7 +35,10 @@ const OPEN_BEFORE_S = 30;
 const OPEN_UNTIL_S = 4;
 const SWEEP_EVERY_MS = 5_000;
 
-export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; until?: () => boolean } = {}) {
+export async function runKeeper(
+  tee: BlindsideProgram,
+  opts: { log?: boolean; until?: () => boolean; onProgress?: () => void } = {},
+) {
   const log = (...a: unknown[]) => opts.log !== false && console.log(new Date().toISOString(), ...a);
   const opened = new Set<number>();
   const paidLogged = new Set<number>();
@@ -46,7 +49,8 @@ export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; un
   const ticker = setInterval(() => {
     const r = currentRound();
     const t = nowS() - roundStart(r);
-    if (t < ROUND.closeMax + ROUND.hold + 5) tick(tee, slotIndex(r)).catch(() => {});
+    if (t < ROUND.closeMax + ROUND.hold + 5)
+      tick(tee, slotIndex(r)).then(() => opts.onProgress?.(), () => {});
   }, TICK_MS);
 
   /**
@@ -106,6 +110,7 @@ export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; un
         try {
           await openRound(tee, next);
           opened.add(next);
+          opts.onProgress?.();
           log(`opened round ${next} (slot ${slotIndex(next)})`);
         } catch (e) {
           log(`open ${next} failed, will retry:`, msg(e));
@@ -135,18 +140,64 @@ export async function runKeeper(tee: BlindsideProgram, opts: { log?: boolean; un
   }
 }
 
+/** Retry delay after a failure: 2 s, 4 s, 8 s ... up to 30 s. */
+const backoff = (attempt: number) => Math.min(30_000, 2_000 * 2 ** Math.min(attempt, 4));
+/** No successful tick or open for this long: log in again and restart the loop. */
+const STALL_MS = 2 * 60_000;
+/** Still stuck long after that (e.g. a request that never returns): exit so the host restarts us. */
+const HANG_MS = 10 * 60_000;
+
+/**
+ * Keep the keeper alive through outages of the private rollup or the RPC.
+ * MagicBlock's rollup can drop connections or refuse logins for a while; the
+ * keeper waits, logs in again and resumes. Rounds that couldn't be served in
+ * the meantime void and refund, which is the program's safe default.
+ */
+async function supervise() {
+  const keypair = loadKeeperKeypair();
+  let lastProgress = Date.now();
+  const progress = () => (lastProgress = Date.now());
+
+  // A dropped socket can surface as an uncaught error event or a stray
+  // rejection. Log it and let the stall check decide whether to restart.
+  process.on("unhandledRejection", (e) => console.error(new Date().toISOString(), "unhandled rejection:", e));
+  process.on("uncaughtException", (e) => console.error(new Date().toISOString(), "uncaught exception:", e));
+
+  // Last resort: if nothing has worked for a long time, let the host restart us.
+  setInterval(() => {
+    if (Date.now() - lastProgress > HANG_MS) {
+      console.error(new Date().toISOString(), "no progress for 10 minutes, exiting for a restart");
+      process.exit(1);
+    }
+  }, 30_000).unref();
+
+  for (let attempt = 0; ; ) {
+    let tee: BlindsideProgram;
+    try {
+      tee = await teeProgramFor(keypair);
+    } catch (e) {
+      progress(); // still alive, just waiting on the rollup
+      const wait = backoff(attempt++);
+      console.error(new Date().toISOString(), `rollup login failed (${(e as Error).message}), retrying in ${wait / 1000}s`);
+      await sleep(wait);
+      continue;
+    }
+    attempt = 0;
+    progress();
+    console.log(new Date().toISOString(), "keeper running as", tee.provider.publicKey!.toBase58());
+    try {
+      await runKeeper(tee, {
+        onProgress: progress,
+        until: () => Date.now() - lastProgress > STALL_MS,
+      });
+      console.error(new Date().toISOString(), "no progress for 2 minutes, logging in again");
+    } catch (e) {
+      console.error(new Date().toISOString(), "keeper loop failed, restarting:", e);
+      await sleep(backoff(0));
+    }
+  }
+}
+
 if (require.main === module) {
-  // Crash loudly so the host restarts us, rather than hanging half-alive.
-  process.on("unhandledRejection", (e) => {
-    console.error("unhandled rejection", e);
-    process.exit(1);
-  });
-  (async () => {
-    const tee = await teeProgramFor(loadKeeperKeypair());
-    console.log("keeper running as", tee.provider.publicKey!.toBase58());
-    await runKeeper(tee);
-  })().catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
+  supervise();
 }
