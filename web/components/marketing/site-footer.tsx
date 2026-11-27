@@ -61,7 +61,7 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="mt-64 flex flex-col gap-10 border-t border-line pt-20 text-[13px] text-text-tertiary md:mt-80 md:flex-row md:items-center md:justify-between">
-          <p>© 2026 Blindside · Devnet build for MagicBlock Solana Blitz v10</p>
+          <p>© 2026 Blindside · Built for MagicBlock Solana Blitz v10</p>
           <p>Prices and proofs are real · Devnet USDC has no value</p>
         </div>
       </div>
