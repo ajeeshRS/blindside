@@ -16,7 +16,6 @@ import { cn } from "@/lib/cn";
 import { roundAvailability } from "@/lib/round";
 import { formatCountdown, scheduleAt } from "@/lib/schedule";
 import { useNow } from "@/lib/use-now";
-import { RoundResultCard } from "./round-result";
 
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
@@ -38,7 +37,6 @@ export function CallPanel() {
   const all = useSyncExternalStore(subscribeCalls, getCalls, getNoCalls);
   const mine = useMemo(() => all.filter((c) => c.wallet === myKey), [all, myKey]);
   const thisRound = sched ? mine.find((c) => c.round === sched.round) : undefined;
-  const last = mine[0];
 
   const callsOpen = Boolean(sched && sched.t < ROUND.closeLatest);
   const balance = s.player.kind === "playing" ? s.player.balance : null;
@@ -54,7 +52,8 @@ export function CallPanel() {
 
   const header = (
     <Panel
-      label="Your call"
+      className="rounded-12! border border-line bg-bg-elevated in-data-[theme=dark]:bg-[hsl(240_8%_5%)]!"
+      label="Order"
       meta={
         balance !== null ? (
           <span className="font-mono text-[13px] tabular">{fmt(balance)} USDC</span>
@@ -272,10 +271,9 @@ export function CallPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-12">
-      {header}
-      {last && <RoundResultCard call={last} />}
-    </div>
+    // Results show on the chart at the reveal and in "Your calls", so the
+    // ticket stays one fixed-size panel.
+    header
   );
 }
 

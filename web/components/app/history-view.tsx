@@ -30,8 +30,8 @@ function ago(round: number, now: number) {
   return new Date(roundStart(round) * 1000).toLocaleDateString();
 }
 
-type Status = "won" | "lost" | "refunded" | "pending" | "missing";
-function statusOf(c: MyCall, r: RoundResult | null, now: number): { status: Status; net: number } {
+export type Status = "won" | "lost" | "refunded" | "pending" | "missing";
+export function statusOf(c: MyCall, r: RoundResult | null, now: number): { status: Status; net: number } {
   if (!r) {
     const revealAt = roundStart(c.round) + ROUND.reveal;
     const gone = now / 1000 > revealAt + (ROUND.slots - 1) * ROUND.cycle;

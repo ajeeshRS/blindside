@@ -126,7 +126,7 @@ export function HiddenTag() {
   return (
     <span
       aria-hidden
-      className="pointer-events-none absolute top-8 left-[var(--band-c)] flex -translate-x-1/2 items-center gap-6 whitespace-nowrap rounded-4 bg-bg-brand px-8 py-4 font-mono text-[11px] tracking-[0.08em] text-text-on-color"
+      className="pointer-events-none absolute top-8 left-[max(68px,var(--band-c))] flex -translate-x-1/2 items-center gap-6 whitespace-nowrap rounded-4 bg-bg-brand px-8 py-4 font-mono text-[11px] tracking-[0.08em] text-text-on-color"
     >
       <EyeOff className="size-12" />
       CLOSE HIDDEN

@@ -36,7 +36,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         <ConnectButton size="sm" className="h-38" />
       </NavCapsule>
 
-      <main className="container-page flex-1 pb-[calc(96px+env(safe-area-inset-bottom))] pt-32 md:pb-96 md:pt-56">
+      <main
+        className={cn(
+          "container-page flex-1 pb-[calc(96px+env(safe-area-inset-bottom))] pt-32 md:pb-96 md:pt-56",
+          // Play is a terminal: wider, with less air above it.
+          isActive("/play") && "max-w-[1480px]! pt-24 md:pt-40 lg:pb-16",
+        )}
+      >
         {children}
       </main>
 
