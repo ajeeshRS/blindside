@@ -136,8 +136,8 @@ function PeekRow({ peek: p, current }: { peek: Peek; current?: boolean }) {
         <LockOpen className="size-14 shrink-0 text-text-up" aria-hidden />
       )}
       <span className="min-w-0 flex-1 truncate">
-        {current ? "This round" : "Last round"}{" "}
-        <span className="font-code text-text-tertiary">#{String(p.round).slice(-5)}</span>
+        {current ? "Live" : "Last"}{" "}
+        <span className="font-code text-text-tertiary">#{p.round.toLocaleString("en-US")}</span>
       </span>
       <span className={cn("shrink-0 font-code text-[12px]", p.sealed ? "text-text-primary" : "text-text-up")}>
         {p.sealed

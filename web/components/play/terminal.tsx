@@ -142,26 +142,22 @@ const closeAt = (s: number) => `0:${String(s).padStart(2, "0")}`;
 
 function Table({ head, children }: { head: string[]; children: ReactNode }) {
   return (
-    <table className="w-full table-fixed text-[13px]">
-      <colgroup>
-        <col className="w-[24%]" />
-        <col className="w-[24%]" />
-        <col className="w-[26%]" />
-        <col className="w-[26%]" />
-      </colgroup>
-      <thead>
-        <tr className="text-left text-[11.5px] text-text-tertiary">
-          {head.map((h, i) => (
-            <th key={h} className={cn("h-32 px-14 font-[500]", i === head.length - 1 && "text-right")}>
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="font-code tabular-nums [&>tr]:border-t [&>tr]:border-line [&_td]:h-34 [&_td]:px-14 [&_td]:whitespace-nowrap [&_td:last-child]:text-right">
-        {children}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="text-left text-[11.5px] text-text-tertiary">
+            {head.map((h, i) => (
+              <th key={h} className={cn("h-32 px-12 font-[500]", i === head.length - 1 && "text-right")}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="font-code tabular-nums [&>tr]:border-t [&>tr]:border-line [&_td]:h-34 [&_td]:px-12 [&_td]:whitespace-nowrap [&_td:last-child]:text-right">
+          {children}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -201,7 +197,7 @@ export function PositionsPanel({ className }: { className?: string }) {
             const live = now && Math.floor(now / 90_000) === c.round;
             return (
               <tr key={`${c.round}-${c.sig}`}>
-                <td className="truncate">#{String(c.round).slice(-5)}</td>
+                <td className="truncate">#{c.round.toLocaleString("en-US")}</td>
                 <td className={c.side === SIDE.up ? "text-text-up" : "text-text-down"}>
                   {c.side === SIDE.up ? "▲ Higher" : "▼ Lower"}
                 </td>
@@ -281,7 +277,7 @@ export function RoundsTapePanel({ className }: { className?: string }) {
             const pct = r.strike && r.settle !== null ? ((r.settle - r.strike) / r.strike) * 100 : null;
             return (
               <tr key={r.round}>
-                <td className="truncate">#{String(r.round).slice(-5)}</td>
+                <td className="truncate">#{r.round.toLocaleString("en-US")}</td>
                 <td>
                   {closeAt(r.closeS)}
                   {r.verified && <span className="ml-4 text-text-up">✓</span>}
