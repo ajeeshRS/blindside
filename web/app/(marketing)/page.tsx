@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpDown, BadgeCheck, Check, Eye, EyeOff, Zap } from "lucide-react";
+import { ArrowRight, Check, Eye, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import { LogoMark } from "@/components/brand/logo";
 import { NextRoundIn, PhaseTicker } from "@/components/marketing/phase-ticker";
@@ -28,19 +28,16 @@ const STACK = [
 
 const STEPS = [
   {
-    icon: ArrowUpDown,
     figure: <PickFigure />,
     title: "Pick up or down",
     body: "Will SOL be higher or lower in 30 seconds? Make your call on the live price.",
   },
   {
-    icon: EyeOff,
     figure: <HiddenFigure />,
     title: "Betting closes in secret",
     body: "Each round closes at a random moment between 10 and 50 seconds, kept hidden inside MagicBlock's private rollup. Calls that come in too late are refunded.",
   },
   {
-    icon: BadgeCheck,
     figure: <RevealFigure />,
     title: "Watch the reveal",
     body: "At 80 seconds, see when it closed, where SOL went 30 seconds later, and whether you won. Then verify the close yourself.",
@@ -256,17 +253,19 @@ export default function LandingPage() {
           body="One round every 90 seconds, on the live SOL price. Three steps, about a minute and a half."
         />
         <ol className="mt-56 grid gap-16 md:grid-cols-2 lg:grid-cols-3">
-          {STEPS.map(({ icon: Icon, ...step }) => (
-            <li key={step.title} className="flex flex-col rounded-28 bg-bg-soft p-28">
-              <span className="tile flex size-44 items-center justify-center rounded-12 text-accent">
-                <Icon className="size-20" aria-hidden />
-              </span>
-              <h3 className="mt-20 text-[21px] leading-[1.2] font-[700] tracking-[-0.035em]">
-                {step.title}
-              </h3>
-              <p className="mt-8 text-[15.5px] leading-[1.6] text-text-secondary">{step.body}</p>
-              <div className="tile mt-auto flex h-[132px] items-center justify-center px-20 pt-0" aria-hidden>
+          {STEPS.map((step, i) => (
+            <li key={step.title} className="flex flex-col rounded-28 bg-bg-soft p-12">
+              <div className="tile flex h-[148px] items-center justify-center rounded-20 px-28" aria-hidden>
                 <div className="flex w-full justify-center">{step.figure}</div>
+              </div>
+              <div className="px-16 pt-24 pb-20">
+                <span className="font-mono text-[12px] tracking-[0.04em] text-text-tertiary">
+                  STEP 0{i + 1}
+                </span>
+                <h3 className="mt-8 text-[21px] leading-[1.2] font-[700] tracking-[-0.035em]">
+                  {step.title}
+                </h3>
+                <p className="mt-10 text-[15.5px] leading-[1.6] text-text-secondary text-pretty">{step.body}</p>
               </div>
             </li>
           ))}
