@@ -9,13 +9,6 @@ import { ButtonLink } from "@/components/ui/button";
 import FlutedBackdrop from "@/components/ui/fluted-backdrop";
 import { Kicker } from "@/components/ui/kicker";
 
-const STATS = [
-  { value: "90s", label: "Per round", body: "A new round opens on the live SOL price every 90 seconds." },
-  { value: "10–50s", label: "Secret close", body: "Betting closes at a moment nobody can see until the reveal." },
-  { value: "30s", label: "To settle", body: "The result is the price 30 seconds after the close." },
-  { value: "80s", label: "Reveal", body: "The close, prices, pools and every call become public." },
-];
-
 const STACK = [
   { name: "MagicBlock Private ER", href: "https://docs.magicblock.gg" },
   {
@@ -99,12 +92,6 @@ const FITS = [
   "Game loot drops",
 ];
 
-const SOURCES = [
-  { who: "Our keeper", what: "A secret seed, sealed inside the private rollup when the round opens." },
-  { who: "Every early player", what: "A random nonce from your device, mixed in with each call." },
-  { who: "MagicBlock VRF", what: "Verifiable randomness, requested from inside the rollup." },
-];
-
 const FAQ = [
   {
     q: "How do I win?",
@@ -113,10 +100,6 @@ const FAQ = [
   {
     q: "How is the pot split?",
     a: "Winners share the losing side's stakes in proportion to what they put in, and get their own stake back. Put in half of the winning side's money and you take half of the losing side's. There's no house and no fee: everything staked is paid out. The smaller side pays more, and both sides stay hidden until the reveal, so nobody can wait for better odds.",
-  },
-  {
-    q: "Why does betting close at a secret time?",
-    a: "In normal fast markets, whoever sees the price first can bet in the last second, when the result is almost certain. That's mostly bots. A secret close removes that advantage, so it's your call against the market, not against someone faster.",
   },
   {
     q: "Why was my call refunded?",
@@ -129,10 +112,6 @@ const FAQ = [
   {
     q: "What do I need to play?",
     a: "Nothing to install. Press Play instantly for a devnet test wallet in your browser, with free devnet SOL and 100 test USDC. You can also use Phantom, Solflare or Backpack on devnet: your wallet approves the setup once, then a session key in your browser signs your calls, so each call is one tap with no pop-up. The session key can't withdraw; only your wallet can.",
-  },
-  {
-    q: "How is the close kept secret, and can I check it?",
-    a: "It's mixed from three things no single party holds: our secret, a random value from each early player, and MagicBlock VRF randomness. It's stored in MagicBlock's Private Ephemeral Rollup, a secure enclave nobody can read until the reveal. You can test that yourself: Try to peek on the Play page asks the rollup for the running round, like a bot would, and gets nothing back. Afterwards everything is public, and the Verify button on the History page recomputes the close in your browser.",
   },
 ];
 
@@ -272,19 +251,6 @@ export default function LandingPage() {
         </ol>
       </section>
 
-      {/* The round, in numbers */}
-      <section className={`container-page ${section} pt-0 md:pt-0`}>
-        <dl className="grid grid-cols-2 gap-16 lg:grid-cols-4">
-          {STATS.map((x) => (
-            <div key={x.label} className="flex flex-col rounded-28 bg-bg-soft p-24 md:p-28">
-              <dt className="order-2 mt-14 text-[15px] font-[700] tracking-[-0.02em]">{x.label}</dt>
-              <dd className="order-1 font-display text-[52px] leading-none md:text-[68px]">{x.value}</dd>
-              <dd className="order-3 mt-6 text-[14px] leading-[1.55] text-text-secondary">{x.body}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
       {/* Why it's fair: one dark spotlight card. */}
       <section className={`container-page ${section} pt-0 md:pt-0`}>
         <SectionHead
@@ -322,32 +288,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Highlight band: the one accent band on the page. */}
-      <section className="bg-bg-brand text-white">
-        <div className={`container-page ${section}`}>
-          <p className="text-kicker text-white/75">A note from the builders</p>
-          <blockquote className="text-display mt-16 max-w-[900px] text-[2.4rem] md:text-[3.75rem]">
-            &ldquo;We didn&apos;t want a faster market. We wanted one where being faster doesn&apos;t
-            matter.&rdquo;
-          </blockquote>
-          <p className="mt-20 max-w-[560px] text-[17px] leading-[1.6] text-white/80">
-            So nobody holds the whole secret. The close is mixed from three sources, sealed until
-            the reveal, and anyone can recompute it afterwards.
-          </p>
-          <ul className="mt-48 grid gap-16 md:grid-cols-3">
-            {SOURCES.map((x, i) => (
-              <li key={x.who} className="rounded-28 bg-white/12 p-28">
-                <span className="font-display text-[34px] leading-none text-white/60">0{i + 1}</span>
-                <h3 className="mt-16 text-[21px] font-[700] tracking-[-0.035em]">{x.who}</h3>
-                <p className="mt-6 text-[15.5px] leading-[1.6] text-white/80">{x.what}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
       {/* The pitch: the sealed close is a building block, the game is its first app. */}
-      <section className={`container-page ${section}`}>
+      <section className={`container-page ${section} pt-0 md:pt-0`}>
         <SectionHead
           kicker="Under the hood"
           title="A sealed close, for any fast market."
@@ -430,7 +372,7 @@ export default function LandingPage() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className={`container-page scroll-mt-80 ${section}`}>
+      <section id="faq" className={`container-page scroll-mt-80 ${section} pt-0 md:pt-0`}>
         <SectionHead kicker="FAQ" title="Questions, answered." />
         <div className="mx-auto mt-56 flex max-w-[760px] flex-col gap-10">
           {FAQ.map((f) => (
