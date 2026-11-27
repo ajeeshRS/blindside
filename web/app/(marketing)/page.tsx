@@ -6,6 +6,7 @@ import { HiddenFigure, PickFigure, RevealFigure } from "@/components/marketing/s
 import { MarketChart } from "@/components/play/market-chart";
 import { PriceHead, RoundMeta, RoundTitle } from "@/components/play/round-clock";
 import { ButtonLink } from "@/components/ui/button";
+import FlutedBackdrop from "@/components/ui/fluted-backdrop";
 import { Kicker } from "@/components/ui/kicker";
 
 const STATS = [
@@ -80,7 +81,7 @@ const EXTRAS = [
   {
     icon: Eye,
     title: "Try to peek, live",
-    body: "One click sends the request a bot would make for the running round. MagicBlock's private rollup answers: nothing exists. The same request for the round that just ended comes back in full.",
+    body: "Your browser first checks the rollup is a genuine Intel TDX enclave, against Intel's certificates. Then one click sends the request a bot would make for the running round: nothing comes back. The round that just ended comes back in full.",
     cta: "Try it on a live round",
     href: "/play#peek",
   },
@@ -169,15 +170,24 @@ const section = "py-80 md:py-112";
 export default function LandingPage() {
   return (
     <>
-      {/* Hero: one idea, one screen. Icon, headline, one line, one action. */}
-      <section className="container-page flex min-h-[calc(100svh-66px)] flex-col items-center justify-center py-[clamp(32px,7vh,88px)] text-center">
+      {/* Hero: one idea, one screen, on a live fluted-satin backdrop that
+          follows the theme (pale blue satin in light, deep blue in dark). It
+          slides up under the floating nav so the backdrop fills the top. */}
+      <section className="relative isolate -mt-50 overflow-hidden bg-[#e9efff] in-data-[theme=dark]:bg-[#06113a]">
+        <FlutedBackdrop className="absolute inset-0 -z-10 opacity-0 transition-opacity duration-700 data-[ready=true]:opacity-100" />
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_55%_at_50%_50%,rgb(255_255_255/0.6),rgb(255_255_255/0.05))] in-data-[theme=dark]:bg-[radial-gradient(ellipse_60%_55%_at_50%_50%,rgb(0_0_0/0.62),rgb(0_0_0/0.15))]"
+        />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 -z-10 h-[22%] bg-gradient-to-b from-transparent to-bg-primary" />
+        <div className="container-page flex min-h-svh flex-col items-center justify-center pt-[clamp(96px,14vh,140px)] pb-[clamp(40px,8vh,96px)] text-center">
         <LogoMark className="size-[clamp(56px,9vh,76px)] drop-shadow-[0_14px_24px_hsl(227_100%_45%/0.35)]" />
         <h1 className="text-display mt-[clamp(20px,4vh,36px)] text-[clamp(3.1rem,min(8.6vw,10.5vh),7.2rem)]">
           Predict SOL.
           <br />
-          <span className="text-text-tertiary">Beat the bots.</span>
+          <span className="text-text-tertiary in-data-[theme=dark]:text-white/60">Beat the bots.</span>
         </h1>
-        <p className="mt-[clamp(16px,3vh,28px)] max-w-[560px] text-[17px] leading-[1.55] text-text-secondary text-pretty md:text-[21px]">
+        <p className="mt-[clamp(16px,3vh,28px)] max-w-[560px] text-[17px] leading-[1.55] text-text-secondary text-pretty in-data-[theme=dark]:text-white/80 md:text-[21px]">
           90-second up/down calls where betting closes at a secret moment, so nobody can wait for
           the last second.
         </p>
@@ -189,19 +199,20 @@ export default function LandingPage() {
         >
           Play now
         </ButtonLink>
-        <p className="mt-14 text-[13.5px] text-text-tertiary">
+        <p className="mt-14 text-[13.5px] text-text-secondary in-data-[theme=dark]:text-white/65">
           Free on Solana devnet<span className="max-sm:hidden"> · no install</span> ·{" "}
           <span className="whitespace-nowrap">
-            next round in <NextRoundIn className="font-[600] text-text-secondary" />
+            next round in <NextRoundIn className="font-[600] text-text-primary" />
           </span>
         </p>
+        </div>
       </section>
 
-      {/* The product, live: a dark window on a soft tray, just below the fold. */}
-      <section className="container-page">
+      {/* The product, live: an app window on a soft tray, just below the fold. It follows the theme. */}
+      <section className="container-page pt-[clamp(48px,9vh,112px)]">
         <div className="rounded-[30px] bg-bg-soft p-10 md:p-16">
-          <div className="dark overflow-hidden rounded-[22px] shadow-[0_30px_60px_-30px_rgb(0_0_0/0.5)]">
-            <div className="flex h-40 items-center gap-8 bg-[hsl(240_8%_10%)] px-16">
+          <div className="overflow-hidden rounded-[22px] bg-bg-elevated shadow-[0_30px_60px_-30px_rgb(0_0_0/0.35)] ring-1 ring-line in-data-[theme=dark]:bg-[hsl(240_8%_5%)]">
+            <div className="flex h-40 items-center gap-8 border-b border-line bg-bg-soft px-16 in-data-[theme=dark]:bg-[hsl(240_8%_9%)]">
               <span className="flex gap-6" aria-hidden>
                 <span className="size-10 rounded-full bg-[#ff5f57]" />
                 <span className="size-10 rounded-full bg-[#febc2e]" />
@@ -215,7 +226,6 @@ export default function LandingPage() {
               <RoundMeta />
             </div>
             <div className="relative mt-12 h-[260px] md:h-[380px] lg:h-[440px]">
-              <div aria-hidden className="bg-blueprint absolute inset-0 opacity-60" />
               <MarketChart className="absolute inset-0" />
             </div>
             <PhaseTicker className="border-t border-line px-16 py-14 md:px-28" />
