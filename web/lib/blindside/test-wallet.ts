@@ -40,6 +40,49 @@ function loadOrCreate(): Keypair {
   return kp;
 }
 
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function base58(bytes: Uint8Array): string {
+  // Base-256 to base-58 digit by digit (little-endian digits).
+  const digits = [0];
+  for (const b of bytes) {
+    let carry = b;
+    for (let i = 0; i < digits.length; i++) {
+      carry += digits[i] * 256;
+      digits[i] = carry % 58;
+      carry = Math.floor(carry / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+  let out = "";
+  for (const b of bytes) {
+    if (b !== 0) break;
+    out += "1";
+  }
+  for (let i = digits.length - 1; i >= 0; i--) {
+    if (out.length === 0 && i > 0 && digits[i] === 0) continue;
+    out += BASE58[digits[i]];
+  }
+  return out;
+}
+
+/**
+ * The test wallet's secret key in base58, the format Phantom, Solflare and
+ * Backpack import, so a player can take the wallet with them. Null if this
+ * browser has no test wallet.
+ */
+export function exportTestWalletKey(): string | null {
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    return saved ? base58(Uint8Array.from(JSON.parse(saved))) : null;
+  } catch {
+    return null;
+  }
+}
+
 export class TestWalletAdapter extends BaseMessageSignerWalletAdapter {
   name = TestWalletName;
   url = "https://github.com/ajeeshRS/blindside";

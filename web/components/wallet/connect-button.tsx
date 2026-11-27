@@ -2,7 +2,7 @@
 
 import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { Check, Copy, ExternalLink, LogOut, Wallet as WalletIcon } from "lucide-react";
+import { Check, Copy, ExternalLink, KeyRound, LogOut, Wallet as WalletIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { devnetExplorerUrl } from "@/lib/config";
 import { cn } from "@/lib/cn";
 import { shortAddress } from "@/lib/format";
-import { TestWalletName } from "@/lib/blindside/test-wallet";
+import { exportTestWalletKey, TestWalletName } from "@/lib/blindside/test-wallet";
 
 const SUGGESTED = [
   { name: "Phantom", url: "https://phantom.com/download" },
@@ -142,7 +142,11 @@ function AccountMenu({ className }: { className?: string }) {
   const { publicKey, wallet, disconnect } = useWallet();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState<"ask" | "copied" | null>(null);
+  // Shown for manual copying when the browser blocks the clipboard.
+  const [shownKey, setShownKey] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const isTest = wallet?.adapter.name === TestWalletName;
 
   useEffect(() => {
     if (!open) return;
@@ -171,10 +175,27 @@ function AccountMenu({ className }: { className?: string }) {
     }
   }
 
+  // Two clicks: the first shows what the key is, the second copies it.
+  async function exportKey() {
+    if (exporting !== "ask") return setExporting("ask");
+    const key = exportTestWalletKey();
+    if (!key) return void toast.error("No test wallet key in this browser");
+    try {
+      await navigator.clipboard.writeText(key);
+      setExporting("copied");
+    } catch {
+      setShownKey(key);
+    }
+  }
+
   return (
     <div ref={ref} className={cn("relative", className)}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+          setExporting(null);
+          setShownKey(null);
+        }}
         aria-expanded={open}
         aria-haspopup="menu"
         className="flex h-38 items-center gap-8 rounded-10 bg-bg-secondary pl-6 pr-12 font-mono text-[13px] font-[600] transition-colors hover:bg-bg-secondary-hover"
@@ -202,6 +223,33 @@ function AccountMenu({ className }: { className?: string }) {
           >
             View on Explorer
           </MenuItem>
+          {isTest && (
+            <>
+              <MenuItem
+                onClick={exportKey}
+                icon={exporting === "copied" ? <Check className="size-16" /> : <KeyRound className="size-16" />}
+              >
+                {exporting === "copied" ? "Secret key copied" : exporting === "ask" ? "Copy secret key" : "Export wallet"}
+              </MenuItem>
+              {exporting && (
+                <p className="px-10 pb-6 pt-2 text-[12.5px] leading-[18px] text-text-secondary">
+                  {exporting === "ask"
+                    ? "Import it into Phantom, Solflare or Backpack to use this wallet there. Anyone with the key controls the wallet. It's a devnet test key: don't send real funds to it."
+                    : "Paste it into your wallet's \"Import private key\". Keep it to yourself."}
+                </p>
+              )}
+              {shownKey && (
+                <input
+                  readOnly
+                  value={shownKey}
+                  aria-label="Test wallet secret key"
+                  onFocus={(e) => e.currentTarget.select()}
+                  autoFocus
+                  className="mx-6 mb-6 block h-32 w-[calc(100%-12px)] rounded-6 bg-bg-secondary px-8 font-mono text-[11px] text-text-primary outline-none"
+                />
+              )}
+            </>
+          )}
           <MenuItem
             onClick={() => {
               setOpen(false);
