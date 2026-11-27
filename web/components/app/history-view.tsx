@@ -1,8 +1,18 @@
 "use client";
 
 import { SIDE, roundStart, ROUND } from "@blindside/client";
-import { ArrowDown, ArrowUp, BadgeCheck, History as HistoryIcon, Loader2, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  BadgeCheck,
+  Check,
+  ChevronRight,
+  Copy,
+  History as HistoryIcon,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { SectionTitle } from "@/components/app/app-shell";
 import { WalletGate } from "@/components/app/wallet-gate";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -297,6 +307,56 @@ function RecentRounds({ onVerify }: { onVerify: (r: RoundResult) => void }) {
   );
 }
 
+/** A long hex value, shortened, with a copy button. The full value is in the tooltip. */
+function Hash({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title={value}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        } catch {}
+      }}
+      className="tile inline-flex h-26 shrink-0 items-center gap-6 rounded-8 px-8 font-mono text-[11.5px] text-text-secondary transition-colors hover:text-text-primary"
+    >
+      {value.slice(0, 6)}…{value.slice(-4)}
+      {copied ? <Check className="size-12 text-text-up" aria-hidden /> : <Copy className="size-12" aria-hidden />}
+      <span className="sr-only">{copied ? "Copied" : "Copy full value"}</span>
+    </button>
+  );
+}
+
+function Ingredient({
+  n,
+  title,
+  body,
+  children,
+}: {
+  n: number;
+  title: string;
+  body: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex gap-12 py-12 first:pt-0 last:pb-0">
+      <span className="tile flex size-24 shrink-0 items-center justify-center rounded-full font-mono text-[11px] text-text-secondary">
+        {n}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-10 gap-y-6">
+          <p className="text-[14px] font-[600] tracking-[-0.01em]">{title}</p>
+          {children}
+        </div>
+        <p className="mt-2 text-[13px] leading-[1.5] text-text-secondary">{body}</p>
+      </div>
+    </li>
+  );
+}
+
 function VerifyModal({ result, onClose }: { result: RoundResult | null; onClose: () => void }) {
   const recomputed = useMemo(() => (result ? verifyClose(result) : null), [result]);
   if (!result) return <Modal open={false} onClose={onClose} title="">{null}</Modal>;
@@ -307,67 +367,91 @@ function VerifyModal({ result, onClose }: { result: RoundResult | null; onClose:
       open
       onClose={onClose}
       title={`Verify round #${result.round.toLocaleString("en-US")}`}
-      description="Recomputed in your browser from the round's public data."
+      description="Was the close really random? Your browser just worked it out again."
     >
-      <div
-        className={cn(
-          "flex items-center gap-8 rounded-10 px-14 py-12 text-[14px] font-[600]",
-          ok ? "bg-bg-up-soft text-text-up" : "bg-bg-down-soft text-text-down",
-        )}
-      >
-        <BadgeCheck className="size-18" aria-hidden />
-        {ok
-          ? `Close recomputes to ${close(recomputed!)}, matching the round.`
-          : `Recomputed ${close(recomputed ?? 0)}, but the round says ${close(result.closeS)}.`}
+      {/* The answer first. */}
+      <div className={cn("rounded-20 px-18 py-16", ok ? "bg-bg-up-soft" : "bg-bg-down-soft")}>
+        <p className={cn("flex items-center gap-6 text-[13px] font-[600]", ok ? "text-text-up" : "text-text-down")}>
+          <BadgeCheck className="size-16" aria-hidden />
+          {ok ? "Verified" : "Doesn't match"}
+        </p>
+        <p className="mt-6 text-[15px] leading-[1.45] text-text-primary">
+          {ok ? (
+            <>
+              Betting closed at <span className="font-[700]">{close(result.closeS)}</span>, and your browser got
+              the same answer from the public data.
+            </>
+          ) : (
+            <>
+              The round says {close(result.closeS)}, but your browser got{" "}
+              <span className="font-[700]">{close(recomputed ?? 0)}</span>.
+            </>
+          )}
+        </p>
       </div>
 
-      <dl className="mt-14 flex flex-col gap-10 text-[13px]">
-        <div>
-          <dt className="text-label text-text-tertiary">Keeper&apos;s secret (revealed)</dt>
-          <dd className="mt-2 break-all font-mono text-[11px] text-text-secondary">{result.secret}</dd>
-        </div>
-        <div>
-          <dt className="text-label text-text-tertiary">
-            Calls mixed in before 10 s ({mixed.length})
-          </dt>
-          <dd className="mt-4 flex flex-col gap-4">
-            {mixed.length === 0 ? (
-              <span className="text-text-tertiary">
-                None: the close came from the secret{result.vrf ? " and VRF" : " alone"}.
-              </span>
-            ) : (
-              mixed.map((c) => (
-                <span key={c.player} className="font-mono text-[11px] text-text-secondary">
-                  {short(c.player)} · nonce {c.nonce.slice(0, 16)}…
-                </span>
-              ))
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-label text-text-tertiary">MagicBlock VRF randomness</dt>
-          <dd className="mt-2 break-all font-mono text-[11px] text-text-secondary">
-            {result.vrf ?? "Didn't arrive before 10 s: the close came from the secret and nonces."}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-label text-text-tertiary">How</dt>
-          <dd className="mt-2 font-mono text-[11px] leading-[17px] text-text-secondary">
-            e = sha256(&quot;blindside&quot; ‖ secret)
-            <br />
-            for each call: e = sha256(e ‖ player ‖ nonce)
-            <br />
-            if VRF arrived: e = sha256(e ‖ &quot;vrf&quot; ‖ vrf)
-            <br />
-            close = 10 + (first 8 bytes of e, little-endian) mod 41
-          </dd>
-        </div>
-      </dl>
-      <p className="mt-14 text-[12px] leading-[17px] text-text-tertiary">
-        While the round ran, the secret, the nonces and the VRF value were all hidden in the
-        private rollup: the keeper never saw the nonces or the VRF value, players never saw the
-        secret, and the VRF oracle saw neither. Nobody could compute this in advance.
+      {/* What went in. */}
+      <p className="mt-20 text-label text-text-tertiary">The close was mixed from</p>
+      <ol className="mt-12 flex flex-col divide-y divide-line">
+        <Ingredient n={1} title="Our secret" body="Sealed in the private rollup when the round opened.">
+          <Hash value={result.secret} />
+        </Ingredient>
+        <Ingredient
+          n={2}
+          title="Players' random numbers"
+          body={
+            mixed.length
+              ? "Each call in the first 10 s added a random number from the player's device."
+              : "Nobody called in the first 10 s this round, so nothing was added here."
+          }
+        >
+          {mixed.length === 0 ? (
+            <span className="text-[12.5px] text-text-tertiary">None</span>
+          ) : (
+            <span className="text-[12.5px] text-text-tertiary">
+              {mixed.length} call{mixed.length === 1 ? "" : "s"}
+            </span>
+          )}
+        </Ingredient>
+        <Ingredient
+          n={3}
+          title="MagicBlock VRF"
+          body={
+            result.vrf
+              ? "Verifiable randomness from MagicBlock, requested inside the rollup."
+              : "It didn't arrive in the first 10 s, so the other two decided the close."
+          }
+        >
+          {result.vrf ? <Hash value={result.vrf} /> : <span className="text-[12.5px] text-text-tertiary">Not used</span>}
+        </Ingredient>
+      </ol>
+
+      <p className="mt-16 rounded-14 bg-bg-soft px-14 py-12 text-[13px] leading-[1.5] text-text-secondary">
+        All of it stayed hidden until the reveal, and no one held every piece, so nobody could know the close in
+        advance. Not even us.
       </p>
+
+      <details className="group mt-14 text-[13px]">
+        <summary className="flex cursor-pointer list-none items-center gap-6 font-[600] text-text-secondary hover:text-text-primary [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="size-14 transition-transform group-open:rotate-90" aria-hidden />
+          Show the math
+        </summary>
+        <div className="mt-10 font-mono text-[11.5px] leading-[1.8] text-text-secondary">
+          <p>e = sha256(&quot;blindside&quot; ‖ secret)</p>
+          <p>for each early call: e = sha256(e ‖ player ‖ nonce)</p>
+          <p>if VRF arrived: e = sha256(e ‖ &quot;vrf&quot; ‖ vrf)</p>
+          <p>close = 10 + (first 8 bytes of e) mod 41</p>
+          {mixed.length > 0 && (
+            <div className="mt-8 border-t border-line pt-8">
+              {mixed.map((c) => (
+                <p key={c.player}>
+                  {short(c.player)} · nonce {c.nonce.slice(0, 12)}…
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
     </Modal>
   );
 }
