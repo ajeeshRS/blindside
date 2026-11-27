@@ -3,18 +3,11 @@ import { Logo } from "@/components/brand/logo";
 
 const groups = [
   {
-    title: "Product",
-    links: [
-      { href: "/play", label: "Play" },
-      { href: "/history", label: "History" },
-      { href: "/settings", label: "Settings" },
-    ],
-  },
-  {
     title: "Trust",
     links: [
       { href: "/fair", label: "How it's fair" },
       { href: "/history", label: "Verify a round" },
+      { href: "https://github.com/ajeeshRS/blindside", label: "Source on GitHub" },
     ],
   },
   {
@@ -33,7 +26,7 @@ export function SiteFooter() {
   return (
     <footer className="dark mx-12 mb-12 overflow-hidden rounded-32 pt-64 md:mx-16 md:mb-16 md:pt-88">
       <div className="container-page">
-        <div className="grid gap-x-20 gap-y-40 md:grid-cols-[2fr_repeat(3,1fr)]">
+        <div className="grid gap-x-20 gap-y-40 md:grid-cols-[2fr_repeat(2,1fr)]">
           <div className="flex flex-col items-start gap-16">
             <Link href="/" aria-label="Blindside home">
               <Logo />
@@ -50,6 +43,7 @@ export function SiteFooter() {
                   <li key={l.href + l.label}>
                     <Link
                       href={l.href}
+                      {...(l.href.startsWith("http") && { target: "_blank", rel: "noreferrer" })}
                       className="text-[14px] leading-[20px] text-text-primary transition-opacity hover:opacity-70"
                     >
                       {l.label}
@@ -61,7 +55,17 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="mt-64 flex flex-col gap-10 border-t border-line pt-20 text-[13px] text-text-tertiary md:mt-80 md:flex-row md:items-center md:justify-between">
-          <p>© 2026 Blindside · Built for MagicBlock Solana Blitz v10</p>
+          <p>
+            © 2026 Blindside · Built for MagicBlock Solana Blitz v10 · Made by{" "}
+            <a
+              href="https://ajeesh.xyz"
+              target="_blank"
+              rel="noreferrer"
+              className="text-text-secondary underline decoration-white/30 underline-offset-3 transition-colors hover:text-text-primary"
+            >
+              Ajeesh
+            </a>
+          </p>
           <p>Prices and proofs are real · Devnet USDC has no value</p>
         </div>
       </div>
