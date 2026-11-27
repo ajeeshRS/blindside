@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Eye, Zap } from "lucide-react";
+import { ArrowRight, Check, Eye, Play, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import { LogoMark } from "@/components/brand/logo";
 import { NextRoundIn, PhaseTicker } from "@/components/marketing/phase-ticker";
@@ -171,7 +171,7 @@ export default function LandingPage() {
           href="/play"
           size="xl"
           className="mt-[clamp(24px,4.5vh,40px)]"
-          icon={<ArrowRight className="size-18" />}
+          icon={<Play className="size-16 fill-current" />}
         >
           Play now
         </ButtonLink>
@@ -403,7 +403,7 @@ export default function LandingPage() {
           It opens in <NextRoundIn className="font-[600] text-text-primary" />. Make your call and
           watch the secret close revealed.
         </p>
-        <ButtonLink href="/play" size="xl" className="mt-32" icon={<ArrowRight className="size-18" />}>
+        <ButtonLink href="/play" size="xl" className="mt-32" icon={<Play className="size-16 fill-current" />}>
           Play now
         </ButtonLink>
       </section>

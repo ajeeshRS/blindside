@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { Play } from "lucide-react";
 import { LogoMark } from "@/components/brand/logo";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { ButtonLink } from "@/components/ui/button";
@@ -14,7 +14,7 @@ export default function NotFound() {
           This page doesn&apos;t exist. The next round does, and it opens every 90 seconds.
         </p>
         <div className="mt-28 flex flex-wrap justify-center gap-10">
-          <ButtonLink href="/play" size="lg" icon={<ArrowRight className="size-16" />}>
+          <ButtonLink href="/play" size="lg" icon={<Play className="size-14 fill-current" />}>
             Play now
           </ButtonLink>
           <ButtonLink href="/" size="lg" variant="secondary">

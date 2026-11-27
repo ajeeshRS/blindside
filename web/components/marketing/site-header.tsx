@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { Play } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { capsuleIcon } from "@/components/ui/capsule-icon";
 import { NavCapsule } from "@/components/ui/nav-capsule";
@@ -15,7 +15,7 @@ export function SiteHeader() {
   return (
     <NavCapsule links={links} label="Main">
       <ThemeToggle className={capsuleIcon()} />
-      <ButtonLink href="/play" size="sm" className="h-38" icon={<ArrowRight className="size-15" />}>
+      <ButtonLink href="/play" size="sm" className="h-38" icon={<Play className="size-13 fill-current" />}>
         Play now
       </ButtonLink>
     </NavCapsule>
