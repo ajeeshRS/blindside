@@ -46,6 +46,9 @@ Base-layer transactions are signed with `chain: "solana:devnet"` passed to the w
 
 ## Live proof in the app
 
+The Play page first verifies the rollup's Intel TDX attestation in the browser (`verifyTeeAttestation` in `packages/client`, wrapping the SDK's `verifyTeeRpcIntegrity`): a random 64-byte challenge, a TDX quote whose report data must equal it, checked against Intel's certificate chain.
+
+
 "Try to peek" on the Play page sends `getAccountInfo` for the running round's slot through an anonymous rollup login, exactly as a bot would, and shows the real answer (`value: null`), next to the same request for the previous, revealed round.
 
 ## Known limits

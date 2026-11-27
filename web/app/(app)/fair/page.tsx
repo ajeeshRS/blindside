@@ -29,7 +29,7 @@ const SECTIONS = [
   },
   {
     title: "You can check the seal yourself",
-    body: "Try to peek on the Play page asks MagicBlock's private rollup for the running round, the way a bot would, and shows the real answer: nothing. After the reveal, Verify on the History page recomputes the close in your browser from the public data.",
+    body: "On the Play page your browser checks that MagicBlock's private rollup is a genuine Intel TDX enclave (a hardware quote verified against Intel's certificates), and Try to peek asks it for the running round the way a bot would: nothing comes back. After the reveal, Verify on the History page recomputes the close in your browser from the public data.",
   },
   {
     title: "The timing of the close can't leak",

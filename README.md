@@ -25,7 +25,7 @@ The same pattern fits prediction markets, short-term options, sealed-bid auction
 1. Open **[/play](https://blindside-beta.vercel.app/play)** and press **Play instantly**. It makes a devnet test wallet in your browser: no install, no pop-ups. (Phantom, Solflare and Backpack work too: your wallet approves the setup once, then a session key in the browser signs your calls, so there's no pop-up per call.)
 2. Press **Start playing**. One step gets you devnet SOL for fees, 100 test USDC, a game balance and a sign-in to the private rollup.
 3. Call **Higher** or **Lower** in the first seconds of a round, then watch the reveal at 80 s: where the secret close landed, the starting price, the 30 seconds that decided it, and what you won.
-4. Press **Try to peek** under the chart. Your browser makes the request a bot would make for the running round, and MagicBlock's private rollup answers `value: null`: the account doesn't exist to outsiders. The round before it, already revealed, comes back with the close, the secret, every call and the VRF value.
+4. Under the chart, your browser checks the rollup is a **genuine Intel TDX enclave** (a hardware quote verified against Intel's certificates, with a fresh random challenge). Then press **Try to peek**. Your browser makes the request a bot would make for the running round, and MagicBlock's private rollup answers `value: null`: the account doesn't exist to outsiders. The round before it, already revealed, comes back with the close, the secret, every call and the VRF value.
 
 Rounds are peer-to-peer: winners are paid from the other side's stakes. Playing alone, you'll be refunded. To see a win or a loss, open a second browser (or a private window) and take the other side in the same round.
 

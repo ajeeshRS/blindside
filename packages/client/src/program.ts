@@ -45,3 +45,14 @@ export function teeConnection(token: string, rpc = TEE_RPC, ws = TEE_WS) {
     wsEndpoint: `${ws}?token=${token}`,
   });
 }
+
+/**
+ * Check that the private rollup really runs inside an Intel TDX enclave:
+ * send a random challenge, get back a TDX quote signed by the CPU, verify it
+ * against Intel's certificate chain, and confirm it carries our challenge.
+ * Works in the browser and in Node. Throws if anything doesn't check out.
+ */
+export async function verifyTeeAttestation(rpc = TEE_RPC) {
+  const { verifyTeeRpcIntegrity } = await import("@magicblock-labs/ephemeral-rollups-sdk");
+  await verifyTeeRpcIntegrity(rpc);
+}

@@ -37,7 +37,7 @@ You don't have to trust any of this: **Try to peek** on the Play page makes the 
 - **Private Ephemeral Rollup:** 8 reusable round slots and every player balance are delegated to the TEE validator. Round slots use a MagicBlock permission with **no readers** until the reveal; balances are readable only by their owner. Transaction contents touching a round are hidden too.
 - **Hidden close from three sources:** the keeper seeds a secret at open, each call adds a random nonce from the player's device, and **MagicBlock VRF** (requested from inside the TEE, answered in ~2 s) is mixed in. At 10 s the close is fixed from sha256 of all three. The keeper never sees nonces or VRF, players never see the secret, the oracle sees neither; anyone can recompute it after the reveal.
 - **Found and fixed a MagicBlock SDK issue:** the `#[vrf_callback]` macro derives the VRF signer at runtime (~270k of the oracle's 300k CU), so callbacks fail and VRF looks broken inside the TEE. A compile-time signer check fixes it; `programs/vrf_probe` reproduces it.
-- **No timing leaks:** calls are accepted identically across the public 0–50 s window; the price tick runs at a steady rate and never fails; reveal is rejected before 80 s.
+- **No timing leaks:** calls are accepted identically across the public 0–50 s window, and late calls are refunded rather than rejected (rejecting them would let anyone probe when the close passed); the price tick runs at a steady rate and never fails; reveal is rejected before 80 s.
 - **Pyth Lazer SOL/USD on MagicBlock**, read on-chain every 400 ms; stale prices or late ticks void and refund the round.
 - **Delegate / commit-and-undelegate** to move balances between Solana and the rollup; deposit and withdraw on Solana.
 - **Session keys for the rollup:** a rollup transaction carries the rollup's blockhash, which wallet extensions can't place (Solflare refuses it as a mainnet "network mismatch" on devnet). The wallet authorises a temporary key once in a normal devnet transaction; the TEE reads that `Session` account from Solana, and the key signs calls and leaving. One-tap calls, no pop-ups; the key can't withdraw.
@@ -45,6 +45,7 @@ You don't have to trust any of this: **Try to peek** on the Play page makes the 
 - **Zero-copy round accounts** (~4 KB) to fit Solana's stack.
 - **Tests:** 31 Rust unit tests for the rules; a devnet end-to-end test (11/11) that runs a real round and checks privacy from an outsider, the admin and a player, and that VRF answered and the close recomputes.
 - **UX:** one-click devnet test wallet, one-approval onboarding (gas drip, faucet, deposit, delegation, rollup sign-in), live chart with the reveal drawn in, History with in-browser verification.
+- **TEE attestation in the browser:** the Play page verifies MagicBlock's rollup is a genuine Intel TDX enclave (random challenge → TDX quote → Intel certificate chain), via the SDK's `verifyTeeRpcIntegrity`.
 - **Live privacy proof:** "Try to peek" reads the running round from the browser through an anonymous rollup login and shows the real `value: null`, next to the revealed previous round.
 
 ## Demo video (2–3 min) shot list
